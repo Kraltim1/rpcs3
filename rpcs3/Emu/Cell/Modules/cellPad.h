@@ -2,7 +2,7 @@
 
 namespace vm { using namespace ps3; }
 
-enum CELL_PAD_ERROR_CODE
+enum
 {
 	CELL_PAD_ERROR_FATAL = 0x80121101,
 	CELL_PAD_ERROR_INVALID_PARAMETER = 0x80121102,
@@ -67,7 +67,20 @@ struct CellPadPeriphInfo
 	be_t<u32> pclass_profile[CELL_PAD_MAX_PORT_NUM];
 };
 
+struct CellPadPeriphData
+{
+	be_t<u32> pclass_type;
+	be_t<u32> pclass_profile;
+	CellPadData cellpad_data;
+};
+
 struct CellCapabilityInfo
 {
 	be_t<u32> info[CELL_PAD_MAX_CAPABILITY_INFO];
+};
+
+struct CellPadActParam
+{
+	u8 motor[CELL_PAD_ACTUATOR_MAX];
+	u8 reserved[6];
 };

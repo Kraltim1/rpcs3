@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "Utilities/Config.h"
 #include "Loader/ELF.h"
 #include "Emu/Memory/Memory.h"
 #include "Emu/System.h"
@@ -9,69 +8,7 @@
 #include "ARMv7Opcodes.h"
 #include "ARMv7Function.h"
 #include "ARMv7Module.h"
-
-LOG_CHANNEL(sceAppMgr);
-LOG_CHANNEL(sceAppUtil);
-LOG_CHANNEL(sceAudio);
-LOG_CHANNEL(sceAudiodec);
-LOG_CHANNEL(sceAudioenc);
-LOG_CHANNEL(sceAudioIn);
-LOG_CHANNEL(sceCamera);
-LOG_CHANNEL(sceCodecEngine);
-LOG_CHANNEL(sceCommonDialog);
-LOG_CHANNEL(sceCtrl);
-LOG_CHANNEL(sceDbg);
-LOG_CHANNEL(sceDeci4p);
-LOG_CHANNEL(sceDeflt);
-LOG_CHANNEL(sceDisplay);
-LOG_CHANNEL(sceFiber);
-LOG_CHANNEL(sceFios);
-LOG_CHANNEL(sceFpu);
-LOG_CHANNEL(sceGxm);
-LOG_CHANNEL(sceHttp);
-LOG_CHANNEL(sceIme);
-LOG_CHANNEL(sceJpeg);
-LOG_CHANNEL(sceJpegEnc);
-LOG_CHANNEL(sceLibc);
-LOG_CHANNEL(sceLibKernel);
-LOG_CHANNEL(sceLibm);
-LOG_CHANNEL(sceLibstdcxx);
-LOG_CHANNEL(sceLibXml);
-LOG_CHANNEL(sceLiveArea);
-LOG_CHANNEL(sceLocation);
-LOG_CHANNEL(sceMd5);
-LOG_CHANNEL(sceMotion);
-LOG_CHANNEL(sceMt19937);
-LOG_CHANNEL(sceNet);
-LOG_CHANNEL(sceNetCtl);
-LOG_CHANNEL(sceNgs);
-LOG_CHANNEL(sceNpBasic);
-LOG_CHANNEL(sceNpCommon);
-LOG_CHANNEL(sceNpManager);
-LOG_CHANNEL(sceNpMatching);
-LOG_CHANNEL(sceNpScore);
-LOG_CHANNEL(sceNpUtility);
-LOG_CHANNEL(scePerf);
-LOG_CHANNEL(scePgf);
-LOG_CHANNEL(scePhotoExport);
-LOG_CHANNEL(sceRazorCapture);
-LOG_CHANNEL(sceRtc);
-LOG_CHANNEL(sceSas);
-LOG_CHANNEL(sceScreenShot);
-LOG_CHANNEL(sceSfmt);
-LOG_CHANNEL(sceSha);
-LOG_CHANNEL(sceSqlite);
-LOG_CHANNEL(sceSsl);
-LOG_CHANNEL(sceSulpha);
-LOG_CHANNEL(sceSysmodule);
-LOG_CHANNEL(sceSystemGesture);
-LOG_CHANNEL(sceTouch);
-LOG_CHANNEL(sceUlt);
-LOG_CHANNEL(sceVideodec);
-LOG_CHANNEL(sceVoice);
-LOG_CHANNEL(sceVoiceQoS);
-
-extern void armv7_init_tls();
+#include "Modules/sceLibKernel.h"
 
 extern std::string arm_get_function_name(const std::string& module, u32 fnid);
 extern std::string arm_get_variable_name(const std::string& module, u32 vnid);
@@ -79,38 +16,31 @@ extern std::string arm_get_variable_name(const std::string& module, u32 vnid);
 // Function lookup table. Not supposed to grow after emulation start.
 std::vector<arm_function_t> g_arm_function_cache;
 
+std::vector<std::string> g_arm_function_names;
+
+extern std::string arm_get_module_function_name(u32 index)
+{
+	if (index < g_arm_function_names.size())
+	{
+		return g_arm_function_names[index];
+	}
+
+	return fmt::format(".%u", index);
+}
+
 extern void arm_execute_function(ARMv7Thread& cpu, u32 index)
 {
 	if (index < g_arm_function_cache.size())
 	{
 		if (const auto func = g_arm_function_cache[index])
 		{
-			const auto previous_function = cpu.last_function; // TODO: use gsl::finally or something
-
-			try
-			{
-				func(cpu);
-			}
-			catch (EmulationStopped)
-			{
-				LOG_WARNING(ARMv7, "Function '%s' aborted", cpu.last_function);
-				cpu.last_function = previous_function;
-				throw;
-			}
-			catch (...)
-			{
-				LOG_ERROR(ARMv7, "Function '%s' aborted", cpu.last_function);
-				cpu.last_function = previous_function;
-				throw;
-			}
-
-			LOG_TRACE(ARMv7, "Function '%s' finished, r0=0x%x", cpu.last_function, cpu.GPR[0]);
-			cpu.last_function = previous_function;
+			func(cpu);
+			LOG_TRACE(ARMv7, "Function '%s' finished, r0=0x%x", arm_get_module_function_name(index), cpu.GPR[0]);
 			return;
 		}
 	}
 
-	throw fmt::exception("Function not registered (%u)" HERE, index);
+	fmt::throw_exception("Function not registered (%u)" HERE, index);
 }
 
 arm_static_module::arm_static_module(const char* name)
@@ -226,15 +156,23 @@ static void arm_initialize_modules()
 
 	// Reinitialize function cache
 	g_arm_function_cache = arm_function_manager::get();
+	g_arm_function_names.clear();
+	g_arm_function_names.resize(g_arm_function_cache.size());
 
 	// "Use" all the modules for correct linkage
 	for (auto& module : registered)
 	{
 		LOG_TRACE(LOADER, "Registered static module: %s", module->name);
+	}
+
+	for (auto& pair : arm_module_manager::get())
+	{
+		const auto module = pair.second;
 
 		for (auto& function : module->functions)
 		{
 			LOG_TRACE(LOADER, "** 0x%08X: %s", function.first, function.second.name);
+			g_arm_function_names.at(function.second.index) = fmt::format("%s.%s", module->name, function.second.name);
 		}
 
 		for (auto& variable : module->variables)
@@ -359,8 +297,7 @@ static void arm_patch_refs(u32 refs, u32 addr)
 	
 }
 
-template<>
-void arm_exec_loader::load() const
+void arm_load_exec(const arm_exec_object& elf)
 {
 	arm_initialize_modules();
 
@@ -377,13 +314,13 @@ void arm_exec_loader::load() const
 	u32 tls_fsize{};
 	u32 tls_vsize{};
 
-	for (const auto& prog : progs)
+	for (const auto& prog : elf.progs)
 	{
 		if (prog.p_type == 0x1 /* LOAD */ && prog.p_memsz)
 		{
-			if (!vm::falloc(prog.p_vaddr, prog.p_memsz, vm::main))
+			if (!vm::falloc(prog.p_vaddr & ~0xfff, prog.p_memsz + (prog.p_vaddr & 0xfff), vm::main))
 			{
-				throw fmt::exception("vm::falloc() failed (addr=0x%x, size=0x%x)", prog.p_vaddr, prog.p_memsz);
+				fmt::throw_exception("vm::falloc() failed (addr=0x%x, size=0x%x)", prog.p_vaddr, prog.p_memsz);
 			}
 
 			if (prog.p_paddr)
@@ -401,7 +338,7 @@ void arm_exec_loader::load() const
 		}
 	}
 
-	if (!module_info) module_info.set(start_addr + header.e_entry);
+	if (!module_info) module_info.set(start_addr + elf.header.e_entry);
 	if (!libent) libent.set(start_addr + module_info->libent_top);
 	if (!libstub) libstub.set(start_addr + module_info->libstub_top);
 
@@ -433,8 +370,6 @@ void arm_exec_loader::load() const
 	LOG_NOTICE(LOADER, "** tls_faddr=0x%x", tls_faddr);
 	LOG_NOTICE(LOADER, "** tls_fsize=0x%x", tls_fsize);
 	LOG_NOTICE(LOADER, "** tls_vsize=0x%x", tls_vsize);
-
-	Emu.SetTLSData(tls_faddr + start_addr, tls_fsize, tls_vsize);
 
 	// Process exports
 	while (libent.addr() < start_addr + module_info->libent_end)
@@ -473,7 +408,7 @@ void arm_exec_loader::load() const
 
 				case 0x6c2224ba: // __sce_moduleinfo
 				{
-					VERIFY(addr == module_info.addr());
+					verify(HERE), addr == module_info.addr();
 					break;
 				}
 
@@ -561,6 +496,7 @@ void arm_exec_loader::load() const
 					// TODO
 					index = ::size32(g_arm_function_cache);
 					g_arm_function_cache.emplace_back();
+					g_arm_function_names.emplace_back(fmt::format("%s.%s", module_name, fname));
 
 					LOG_ERROR(LOADER, "** Unknown function '%s' in module '%s' (*0x%x) -> index %u", fname, module_name, faddr, index);
 				}
@@ -608,8 +544,8 @@ void arm_exec_loader::load() const
 
 	LOG_NOTICE(LOADER, "__sce_process_param(*0x%x) analysis...", proc_param);
 
-	VERIFY(proc_param->size >= sizeof(psv_process_param_t));
-	VERIFY(proc_param->ver == "PSP2"_u32);
+	verify(HERE), proc_param->size >= sizeof(psv_process_param_t);
+	verify(HERE), proc_param->ver == "PSP2"_u32;
 
 	LOG_NOTICE(LOADER, "*** size=0x%x; 0x%x, 0x%x, 0x%x", proc_param->size, proc_param->ver, proc_param->unk0, proc_param->unk1);
 
@@ -625,7 +561,7 @@ void arm_exec_loader::load() const
 
 	LOG_NOTICE(LOADER, "__sce_libcparam(*0x%x) analysis...", libc_param);
 
-	VERIFY(libc_param->size >= 0x1c);
+	verify(HERE), libc_param->size >= 0x1c;
 
 	LOG_NOTICE(LOADER, "*** size=0x%x; 0x%x, 0x%x, 0x%x", libc_param->size, libc_param->unk0, libc_param->unk1, libc_param->unk2);
 
@@ -637,20 +573,16 @@ void arm_exec_loader::load() const
 	const auto stop_code = vm::ptr<u32>::make(vm::alloc(3 * 4, vm::main));
 	stop_code[0] = 0xf870; // HACK instruction (Thumb)
 	stop_code[1] = 1; // Predefined function index (HLE return)
-	Emu.SetCPUThreadStop(stop_code.addr());
-
-	armv7_init_tls();
+	arm_function_manager::addr = stop_code.addr();
 
 	const std::string& thread_name = proc_param->sceUserMainThreadName ? proc_param->sceUserMainThreadName.get_ptr() : "main_thread";
 	const u32 stack_size = proc_param->sceUserMainThreadStackSize ? proc_param->sceUserMainThreadStackSize->value() : 256 * 1024;
 	const u32 priority = proc_param->sceUserMainThreadPriority ? proc_param->sceUserMainThreadPriority->value() : 160;
 
-	auto thread = idm::make_ptr<ARMv7Thread>(thread_name);
+	auto thread = idm::make_ptr<ARMv7Thread>(thread_name, priority, stack_size);
 
-	thread->PC = entry_point;
-	thread->stack_size = stack_size;
-	thread->prio = priority;
-	thread->cpu_init();
+	thread->write_pc(entry_point, 0);
+	thread->TLS = fxm::make_always<arm_tls_manager>(tls_faddr + start_addr, tls_fsize, tls_vsize)->alloc();
 
 	// Initialize args
 	std::vector<char> argv_data;

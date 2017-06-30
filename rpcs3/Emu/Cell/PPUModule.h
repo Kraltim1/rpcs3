@@ -1,20 +1,36 @@
-#pragma once
+﻿#pragma once
 
 #include "PPUFunction.h"
 #include "PPUCallback.h"
 #include "ErrorCodes.h"
 
-namespace vm { using namespace ps3; }
+// Helper function
+constexpr const char* ppu_select_name(const char* name, u32 id)
+{
+	return name;
+}
+
+// Helper function
+constexpr const char* ppu_select_name(const char* name, const char* orig_name)
+{
+	return orig_name;
+}
 
 // Generate FNID or VNID for given name
 extern u32 ppu_generate_id(const char* name);
 
+// Overload for REG_FNID, REG_VNID macro 
+constexpr u32 ppu_generate_id(u32 id)
+{
+	return id;
+}
+
 // Flags set with REG_FUNC
 enum ppu_static_function_flags : u32
 {
-	MFF_FORCED_HLE = (1 << 0), // Always call HLE function (TODO: deactivated)
-
-	MFF_PERFECT = MFF_FORCED_HLE, // Indicates that function is completely implemented and can replace LLE implementation
+	MFF_FORCED_HLE = (1 << 0), // Always call HLE function
+	MFF_PERFECT    = (1 << 1), // Indicates complete implementation and LLE interchangeability
+	MFF_HIDDEN     = (1 << 2), // Invisible function for internal use (TODO)
 };
 
 // HLE function information
@@ -29,7 +45,7 @@ struct ppu_static_function
 struct ppu_static_variable
 {
 	const char* name;
-	vm::gvar<void>* var; // Pointer to variable address storage
+	vm::ps3::gvar<void>* var; // Pointer to variable address storage
 	void(*init)(); // Variable initialization function
 	u32 size;
 	u32 align;
@@ -44,8 +60,8 @@ public:
 	task_stack on_load;
 	task_stack on_unload;
 
-	std::unordered_map<u32, ppu_static_function> functions;
-	std::unordered_map<u32, ppu_static_variable> variables;
+	std::unordered_map<u32, ppu_static_function, value_hash<u32>> functions;
+	std::unordered_map<u32, ppu_static_variable, value_hash<u32>> variables;
 
 public:
 	ppu_static_module(const char* name);
@@ -79,27 +95,36 @@ public:
 	static const ppu_static_module* get_module(const std::string& name);
 
 	template<typename T, T Func>
-	static void register_static_function(const char* module, const char* name, ppu_function_t func, u32 fnid, u32 flags)
+	static auto& register_static_function(const char* module, const char* name, ppu_function_t func, u32 fnid)
 	{
 		auto& info = access_static_function(module, fnid);
 
 		info.name  = name;
 		info.index = ppu_function_manager::register_function<T, Func>(func);
-		info.flags = flags;
+		info.flags = 0;
+
+		return info;
 	}
 
 	template<typename T, T* Var>
-	static void register_static_variable(const char* module, const char* name, u32 vnid, void(*init)())
+	static auto& register_static_variable(const char* module, const char* name, u32 vnid)
 	{
-		static_assert(std::is_same<CV u32, CV typename T::addr_type>::value, "Static variable registration: vm::gvar<T> expected");
+		static_assert(std::is_same<u32, std::decay_t<typename T::addr_type>>::value, "Static variable registration: vm::gvar<T> expected");
 
 		auto& info = access_static_variable(module, vnid);
 
 		info.name  = name;
-		info.var   = reinterpret_cast<vm::gvar<void>*>(Var);
-		info.init  = init ? init : [] {};
+		info.var   = reinterpret_cast<vm::ps3::gvar<void>*>(Var);
+		info.init  = [] {};
 		info.size  = SIZE_32(typename T::type);
 		info.align = ALIGN_32(typename T::type);
+
+		return info;
+	}
+
+	static const auto& get()
+	{
+		return access();
 	}
 
 	static const ppu_static_module cellAdec;
@@ -111,11 +136,13 @@ public:
 	static const ppu_static_module cellCamera;
 	static const ppu_static_module cellCelp8Enc;
 	static const ppu_static_module cellCelpEnc;
+	static const ppu_static_module cellCrossController;
 	static const ppu_static_module cellDaisy;
 	static const ppu_static_module cellDmux;
 	static const ppu_static_module cellFiber;
 	static const ppu_static_module cellFont;
 	static const ppu_static_module cellFontFT;
+	static const ppu_static_module cell_FreeType2;
 	static const ppu_static_module cellFs;
 	static const ppu_static_module cellGame;
 	static const ppu_static_module cellGameExec;
@@ -130,6 +157,7 @@ public:
 	static const ppu_static_module cellJpgEnc;
 	static const ppu_static_module cellKey2char;
 	static const ppu_static_module cellL10n;
+	static const ppu_static_module cellLibprof;
 	static const ppu_static_module cellMic;
 	static const ppu_static_module cellMusic;
 	static const ppu_static_module cellMusicDecode;
@@ -148,6 +176,7 @@ public:
 	static const ppu_static_module cellRemotePlay;
 	static const ppu_static_module cellResc;
 	static const ppu_static_module cellRtc;
+	static const ppu_static_module cellRtcAlarm;
 	static const ppu_static_module cellRudp;
 	static const ppu_static_module cellSail;
 	static const ppu_static_module cellSailRec;
@@ -169,6 +198,7 @@ public:
 	static const ppu_static_module cellSysutilAp;
 	static const ppu_static_module cellSysutilAvc;
 	static const ppu_static_module cellSysutilAvc2;
+	static const ppu_static_module cellSysutilNpEula;
 	static const ppu_static_module cellSysutilMisc;
 	static const ppu_static_module cellUsbd;
 	static const ppu_static_module cellUsbPspcm;
@@ -178,6 +208,7 @@ public:
 	static const ppu_static_module cellVideoUpload;
 	static const ppu_static_module cellVoice;
 	static const ppu_static_module cellVpost;
+	static const ppu_static_module libmedi;
 	static const ppu_static_module libmixer;
 	static const ppu_static_module libsnd3;
 	static const ppu_static_module libsynth2;
@@ -198,32 +229,19 @@ public:
 
 // Call specified function directly if LLE is not available, call LLE equivalent in callback style otherwise
 template<typename T, T Func, typename... Args, typename RT = std::result_of_t<T(Args...)>>
-inline RT ppu_execute_function_or_callback(const char* name, PPUThread& ppu, Args&&... args)
+inline RT ppu_execute_function_or_callback(const char* name, ppu_thread& ppu, Args&&... args)
 {
-	const auto previous_function = ppu.last_function; // TODO
-
-	try
-	{
-		return Func(std::forward<Args>(args)...);
-	}
-	catch (...)
-	{
-		LOG_ERROR(PPU, "Function call '%s' aborted", ppu.last_function);
-		ppu.last_function = previous_function;
-		throw;
-	}
-
-	ppu.last_function = previous_function;
+	return Func(std::forward<Args>(args)...);
 }
 
 #define CALL_FUNC(ppu, func, ...) ppu_execute_function_or_callback<decltype(&func), &func>(#func, ppu, __VA_ARGS__)
 
-#define REG_FNID(module, nid, func, ...) ppu_module_manager::register_static_function<decltype(&func), &func>(#module, #func, BIND_FUNC(func), nid, {__VA_ARGS__})
+#define REG_FNID(module, nid, func) ppu_module_manager::register_static_function<decltype(&func), &func>(#module, ppu_select_name(#func, nid), BIND_FUNC(func, ppu.cia = (u32)ppu.lr & ~3), ppu_generate_id(nid))
 
-#define REG_FUNC(module, func, ...) REG_FNID(module, ppu_generate_id(#func), func, __VA_ARGS__)
+#define REG_FUNC(module, func) REG_FNID(module, #func, func)
 
-#define REG_VNID(module, nid, var, ...) ppu_module_manager::register_static_variable<decltype(var), &var>(#module, #var, nid, {__VA_ARGS__})
+#define REG_VNID(module, nid, var) ppu_module_manager::register_static_variable<decltype(var), &var>(#module, ppu_select_name(#var, nid), ppu_generate_id(nid))
 
-#define REG_VAR(module, var, ...) REG_VNID(module, ppu_generate_id(#var), var, __VA_ARGS__)
+#define REG_VAR(module, var) REG_VNID(module, #var, var)
 
 #define UNIMPLEMENTED_FUNC(module) module.todo("%s", __func__)

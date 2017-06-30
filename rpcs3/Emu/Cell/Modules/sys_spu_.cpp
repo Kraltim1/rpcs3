@@ -28,21 +28,17 @@ s32 sys_spu_elf_get_segments(u32 elf_img, vm::ptr<sys_spu_segment> segments, s32
 	return CELL_OK;
 }
 
-s32 sys_spu_image_import(vm::ptr<sys_spu_image_t> img, u32 src, u32 type)
+s32 sys_spu_image_import(vm::ptr<sys_spu_image> img, u32 src, u32 type)
 {
 	sysPrxForUser.warning("sys_spu_image_import(img=*0x%x, src=0x%x, type=%d)", img, src, type);
 
-	u32 entry, offset = LoadSpuImage(fs::file(vm::base(src), 0 - src), entry);
-
-	img->type = SYS_SPU_IMAGE_TYPE_USER;
-	img->entry_point = entry;
-	img->segs.set(offset); // TODO: writing actual segment info
-	img->nsegs = 1; // wrong value
+	// Load from memory (TODO)
+	img->load(fs::file{vm::base(src), 0 - src});
 
 	return CELL_OK;
 }
 
-s32 sys_spu_image_close(vm::ptr<sys_spu_image_t> img)
+s32 sys_spu_image_close(vm::ptr<sys_spu_image> img)
 {
 	sysPrxForUser.warning("sys_spu_image_close(img=*0x%x)", img);
 
@@ -59,58 +55,41 @@ s32 sys_spu_image_close(vm::ptr<sys_spu_image_t> img)
 		return CELL_EINVAL;
 	}
 
-	VERIFY(vm::dealloc(img->segs.addr(), vm::main)); // Current rough implementation
+	img->free();
 	return CELL_OK;
 }
 
 s32 sys_raw_spu_load(s32 id, vm::cptr<char> path, vm::ptr<u32> entry)
 {
-	sysPrxForUser.warning("sys_raw_spu_load(id=%d, path=*0x%x, entry=*0x%x)", id, path, entry);
-	sysPrxForUser.warning("*** path = '%s'", path.get_ptr());
+	sysPrxForUser.warning("sys_raw_spu_load(id=%d, path=%s, entry=*0x%x)", id, path, entry);
 
-	const fs::file f(vfs::get(path.get_ptr()));
-	if (!f)
+	const fs::file elf_file = decrypt_self(fs::file(vfs::get(path.get_ptr())));
+
+	if (!elf_file)
 	{
-		sysPrxForUser.error("sys_raw_spu_load() error: '%s' not found!", path.get_ptr());
+		sysPrxForUser.error("sys_raw_spu_load() error: %s not found!", path);
 		return CELL_ENOENT;
 	}
 
-	SceHeader hdr;
-	hdr.Load(f);
+	sys_spu_image img;
+	img.load(elf_file);
+	img.deploy(RAW_SPU_BASE_ADDR + RAW_SPU_OFFSET * id);
+	img.free();
 
-	if (hdr.CheckMagic())
-	{
-		throw fmt::exception("sys_raw_spu_load() error: '%s' is encrypted! Try to decrypt it manually and try again.", path.get_ptr());
-	}
-
-	f.seek(0);
-
-	u32 _entry;
-	LoadSpuImage(f, _entry, RAW_SPU_BASE_ADDR + RAW_SPU_OFFSET * id);
-
-	*entry = _entry | 1;
+	*entry = img.entry_point | 1;
 
 	return CELL_OK;
 }
 
-s32 sys_raw_spu_image_load(PPUThread& ppu, s32 id, vm::ptr<sys_spu_image_t> img)
+s32 sys_raw_spu_image_load(ppu_thread& ppu, s32 id, vm::ptr<sys_spu_image> img)
 {
 	sysPrxForUser.warning("sys_raw_spu_image_load(id=%d, img=*0x%x)", id, img);
 
-	// TODO: use segment info
+	// Load SPU segments
+	img->deploy(RAW_SPU_BASE_ADDR + RAW_SPU_OFFSET * id);
 
-	const auto stamp0 = get_system_time();
-
-	std::memcpy(vm::base(RAW_SPU_BASE_ADDR + RAW_SPU_OFFSET * id), img->segs.get_ptr(), 256 * 1024);
-
-	const auto stamp1 = get_system_time();
-
+	// Use MMIO
 	vm::write32(RAW_SPU_BASE_ADDR + RAW_SPU_OFFSET * id + RAW_SPU_PROB_OFFSET + SPU_NPC_offs, img->entry_point | 1);
-
-	const auto stamp2 = get_system_time();
-
-	sysPrxForUser.error("memcpy() latency: %lldus", (stamp1 - stamp0));
-	sysPrxForUser.error("MMIO latency: %lldus", (stamp2 - stamp1));
 
 	return CELL_OK;
 }
@@ -140,7 +119,7 @@ s32 _sys_spu_printf_finalize()
 	return CELL_OK;
 }
 
-s32 _sys_spu_printf_attach_group(PPUThread& ppu, u32 group)
+s32 _sys_spu_printf_attach_group(ppu_thread& ppu, u32 group)
 {
 	sysPrxForUser.warning("_sys_spu_printf_attach_group(group=0x%x)", group);
 
@@ -152,7 +131,7 @@ s32 _sys_spu_printf_attach_group(PPUThread& ppu, u32 group)
 	return g_spu_printf_agcb(ppu, group);
 }
 
-s32 _sys_spu_printf_detach_group(PPUThread& ppu, u32 group)
+s32 _sys_spu_printf_detach_group(ppu_thread& ppu, u32 group)
 {
 	sysPrxForUser.warning("_sys_spu_printf_detach_group(group=0x%x)", group);
 
@@ -164,7 +143,7 @@ s32 _sys_spu_printf_detach_group(PPUThread& ppu, u32 group)
 	return g_spu_printf_dgcb(ppu, group);
 }
 
-s32 _sys_spu_printf_attach_thread(PPUThread& ppu, u32 thread)
+s32 _sys_spu_printf_attach_thread(ppu_thread& ppu, u32 thread)
 {
 	sysPrxForUser.warning("_sys_spu_printf_attach_thread(thread=0x%x)", thread);
 
@@ -176,7 +155,7 @@ s32 _sys_spu_printf_attach_thread(PPUThread& ppu, u32 thread)
 	return g_spu_printf_atcb(ppu, thread);
 }
 
-s32 _sys_spu_printf_detach_thread(PPUThread& ppu, u32 thread)
+s32 _sys_spu_printf_detach_thread(ppu_thread& ppu, u32 thread)
 {
 	sysPrxForUser.warning("_sys_spu_printf_detach_thread(thread=0x%x)", thread);
 

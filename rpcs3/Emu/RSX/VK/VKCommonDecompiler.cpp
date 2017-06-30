@@ -1,9 +1,13 @@
 #include "stdafx.h"
 #include "VKCommonDecompiler.h"
+#include "restore_new.h"
 #include "../../../../Vulkan/glslang/SPIRV/GlslangToSpv.h"
+#include "define_new_memleakdetect.h"
 
 namespace vk
 {
+	static TBuiltInResource g_default_config;
+
 	std::string getFloatTypeNameImpl(size_t elementCount)
 	{
 		switch (elementCount)
@@ -30,7 +34,7 @@ namespace vk
 		case FUNCTION::FUNCTION_DP2:
 			return "vec4(dot($0.xy, $1.xy))";
 		case FUNCTION::FUNCTION_DP2A:
-			return "";
+			return "vec4(dot($0.xy, $1.xy) + $2.x)";
 		case FUNCTION::FUNCTION_DP3:
 			return "vec4(dot($0.xyz, $1.xyz))";
 		case FUNCTION::FUNCTION_DP4:
@@ -43,28 +47,40 @@ namespace vk
 			return "vec4(1., 1., 1., 1.)";
 		case FUNCTION::FUNCTION_FRACT:
 			return "fract($0)";
+		case FUNCTION::FUNCTION_REFL:
+			return "vec4($0 - 2.0 * (dot($0, $1)) * $1)";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE1D:
 			return "texture($t, $0.x)";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE1D_PROJ:
 			return "textureProj($t, $0.x, $1.x)"; // Note: $1.x is bias
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE1D_LOD:
 			return "textureLod($t, $0.x, $1.x)";
+		case FUNCTION::FUNCTION_TEXTURE_SAMPLE1D_GRAD:
+			return "textureGrad($t, $0.x, $1.x, $2.x)";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE2D:
-			return "texture($t, $0.xy)";
+			return "texture($t, $0.xy * texture_parameters[$_i].xy)";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE2D_PROJ:
-			return "textureProj($t, $0.xyz, $1.x)"; // Note: $1.x is bias
+			return "textureProj($t, $0, $1.x)"; // Note: $1.x is bias
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLE2D_LOD:
-			return "textureLod($t, $0.xy, $1.x)";
+			return "textureLod($t, $0.xy * texture_parameters[$_i].xy, $1.x)";
+		case FUNCTION::FUNCTION_TEXTURE_SAMPLE2D_GRAD:
+			return "textureGrad($t, $0.xy * texture_parameters[$_i].xy, $1.xy, $2.xy)"; // Note: $1.x is bias
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLECUBE:
 			return "texture($t, $0.xyz)";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLECUBE_PROJ:
-			return "textureProj($t, $0.xyzw, $1.x)"; // Note: $1.x is bias
+			return "texture($t, ($0.xyz / $0.w))";
 		case FUNCTION::FUNCTION_TEXTURE_SAMPLECUBE_LOD:
 			return "textureLod($t, $0.xyz, $1.x)";
+		case FUNCTION::FUNCTION_TEXTURE_SAMPLECUBE_GRAD:
+			return "textureGrad($t, $0.xyz, $1.xyz, $2.xyz)";
 		case FUNCTION::FUNCTION_DFDX:
 			return "dFdx($0)";
 		case FUNCTION::FUNCTION_DFDY:
 			return "dFdy($0)";
+		case FUNCTION::FUNCTION_VERTEX_TEXTURE_FETCH2D:
+			return "textureLod($t, $0.xy, 0)";
+		case FUNCTION::FUNCTION_TEXTURE_SAMPLE2D_DEPTH_RGBA:
+			return "texture2DReconstruct($t, $0.xy)";
 		}
 	}
 
@@ -85,31 +101,11 @@ namespace vk
 		case COMPARE::FUNCTION_SNE:
 			return "notEqual(" + Op0 + ", " + Op1 + ")";
 		}
-		throw EXCEPTION("Unknow compare function");
+		fmt::throw_exception("Unknown compare function" HERE);
 	}
 
-	void insert_glsl_legacy_function(std::ostream& OS)
+	void insert_glsl_legacy_function(std::ostream& OS, glsl::program_domain domain)
 	{
-		OS << "vec4 divsq_legacy(vec4 num, vec4 denum)\n";
-		OS << "{\n";
-		OS << "	return num / sqrt(max(denum.xxxx, 1.E-10));\n";
-		OS << "}\n";
-
-		OS << "vec4 rcp_legacy(vec4 denum)\n";
-		OS << "{\n";
-		OS << "	return 1. / denum;\n";
-		OS << "}\n";
-
-		OS << "vec4 rsq_legacy(vec4 val)\n";
-		OS << "{\n";
-		OS << "	return float(1.0 / sqrt(max(val.x, 1.E-10))).xxxx;\n";
-		OS << "}\n\n";
-
-		OS << "vec4 log2_legacy(vec4 val)\n";
-		OS << "{\n";
-		OS << "	return log2(max(val.x, 1.E-10)).xxxx;\n";
-		OS << "}\n\n";
-
 		OS << "vec4 lit_legacy(vec4 val)";
 		OS << "{\n";
 		OS << "	vec4 clamped_val = val;\n";
@@ -121,6 +117,30 @@ namespace vk
 		OS << "	result.y = clamped_val.x;\n";
 		OS << "	result.z = clamped_val.x > 0. ? exp(clamped_val.w * log(max(clamped_val.y, 1.E-10))) : 0.;\n";
 		OS << "	return result;\n";
+		OS << "}\n\n";
+
+		if (domain == glsl::program_domain::glsl_vertex_program)
+			return;
+
+		//NOTE: After testing with GOW, the w component is either the original depth or wraps around to the x component
+		//Since component.r == depth_value with some precision loss, just use the precise depth value for now (further testing needed)
+		OS << "vec4 decodeLinearDepth(float depth_value)\n";
+		OS << "{\n";
+		OS << "	uint value = uint(depth_value * 16777215);\n";
+		OS << "	uint b = (value & 0xff);\n";
+		OS << "	uint g = (value >> 8) & 0xff;\n";
+		OS << "	uint r = (value >> 16) & 0xff;\n";
+		OS << "	return vec4(float(r)/255., float(g)/255., float(b)/255., depth_value);\n";
+		OS << "}\n\n";
+
+		OS << "vec4 texture2DReconstruct(sampler2D tex, vec2 coord)\n";
+		OS << "{\n";
+		OS << "	return decodeLinearDepth(texture(tex, coord.xy).r);\n";
+		OS << "}\n\n";
+
+		OS << "vec4 texture2DReconstruct(sampler2DRect tex, vec2 coord)\n";
+		OS << "{\n";
+		OS << "	return decodeLinearDepth(texture(tex, coord.xy).r);\n";
 		OS << "}\n\n";
 	}
 
@@ -223,20 +243,22 @@ namespace vk
 
 	static const varying_register_t varying_regs[] =
 	{
-		{ "diff_color", 0 },
-		{ "tc0", 1 },
-		{ "tc1", 2 },
-		{ "tc2", 3 },
-		{ "tc3", 4 },
-		{ "tc4", 5 },
-		{ "tc5", 6 },
-		{ "tc6", 7 },
-		{ "tc7", 8 },
-		{ "tc8", 9 },
-		{ "tc9", 10 },
+		{ "tc0", 0 },
+		{ "tc1", 1 },
+		{ "tc2", 2 },
+		{ "tc3", 3 },
+		{ "tc4", 4 },
+		{ "tc5", 5 },
+		{ "tc6", 6 },
+		{ "tc7", 7 },
+		{ "tc8", 8 },
+		{ "tc9", 9 },
+		{ "diff_color", 10 },
+		{ "back_diff_color", 10 },
 		{ "front_diff_color", 11 },
-		{ "front_spec_color", 12 },
-		{ "spec_color", 13 },
+		{ "spec_color", 12 },
+		{ "back_spec_color", 12 },
+		{ "front_spec_color", 13 },
 		{ "fog_c", 14 },
 		{ "fogc", 14 }
 	};
@@ -249,27 +271,23 @@ namespace vk
 				return t;
 		}
 
-		throw EXCEPTION("Unknown register name: %s", name);
+		fmt::throw_exception("Unknown register name: %s" HERE, name);
 	}
 
 	bool compile_glsl_to_spv(std::string& shader, glsl::program_domain domain, std::vector<u32>& spv)
 	{
 		EShLanguage lang = (domain == glsl::glsl_fragment_program) ? EShLangFragment : EShLangVertex;
 
-		glslang::InitializeProcess();
 		glslang::TProgram program;
 		glslang::TShader shader_object(lang);
 		
 		bool success = false;
 		const char *shader_text = shader.data();
-		
-		TBuiltInResource rsc;
-		init_default_resources(rsc);
 
 		shader_object.setStrings(&shader_text, 1);
 
 		EShMessages msg = (EShMessages)(EShMsgVulkanRules | EShMsgSpvRules);
-		if (shader_object.parse(&rsc, 400, EProfile::ECoreProfile, false, true, msg))
+		if (shader_object.parse(&g_default_config, 400, EProfile::ECoreProfile, false, true, msg))
 		{
 			program.addShader(&shader_object);
 			success = program.link(EShMsgVulkanRules);
@@ -281,11 +299,21 @@ namespace vk
 		}
 		else
 		{
-			LOG_ERROR(RSX, shader_object.getInfoLog());
-			LOG_ERROR(RSX, shader_object.getInfoDebugLog());
+			LOG_ERROR(RSX, "%s", shader_object.getInfoLog());
+			LOG_ERROR(RSX, "%s", shader_object.getInfoDebugLog());
 		}
 
-		glslang::FinalizeProcess();
 		return success;
+	}
+
+	void initialize_compiler_context()
+	{
+		glslang::InitializeProcess();
+		init_default_resources(g_default_config);
+	}
+
+	void finalize_compiler_context()
+	{
+		glslang::FinalizeProcess();
 	}
 }

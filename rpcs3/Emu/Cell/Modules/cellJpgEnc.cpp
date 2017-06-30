@@ -1,18 +1,10 @@
 #include "stdafx.h"
 #include "Emu/Cell/PPUModule.h"
 
-logs::channel cellJpgEnc("cellJpgEnc", logs::level::notice);
+#include "cellJpgEnc.h"
 
-// Error Codes
-enum
-{
-	CELL_JPGENC_ERROR_ARG   = 0x80611191,
-	CELL_JPGENC_ERROR_SEQ   = 0x80611192,
-	CELL_JPGENC_ERROR_BUSY  = 0x80611193,
-	CELL_JPGENC_ERROR_EMPTY = 0x80611194,
-	CELL_JPGENC_ERROR_RESET = 0x80611195,
-	CELL_JPGENC_ERROR_FATAL = 0x80611196,
-};
+logs::channel cellJpgEnc("cellJpgEnc");
+
 
 s32 cellJpgEncQueryAttr()
 {

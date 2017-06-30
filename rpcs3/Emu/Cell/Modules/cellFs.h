@@ -1,12 +1,6 @@
 #pragma once
 
-namespace vm { using namespace ps3; }
-
-struct CellFsDirectoryEntry
-{
-	CellFsStat attribute;
-	CellFsDirent entry_name;
-};
+#include "Emu/Cell/lv2/sys_fs.h"
 
 // CellFsRingBuffer.copy
 enum : s32
@@ -42,7 +36,7 @@ struct CellFsAio
 {
 	be_t<u32> fd;
 	be_t<u64> offset;
-	vm::bptr<void> buf;
+	vm::bptrb<void> buf;
 	be_t<u64> size;
 	be_t<u64> user_data;
 };

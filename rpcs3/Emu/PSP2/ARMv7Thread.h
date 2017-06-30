@@ -14,13 +14,17 @@ enum ARMv7InstructionSet
 class ARMv7Thread final : public cpu_thread
 {
 public:
+	static const u32 id_base = 1;
+	static const u32 id_step = 2;
+	static const u32 id_count = 4096;
+
 	virtual std::string get_name() const override;
 	virtual std::string dump() const override;
-	virtual void cpu_init() override;
 	virtual void cpu_task() override;
+	virtual void cpu_task_main();
 	virtual ~ARMv7Thread() override;
 
-	ARMv7Thread(const std::string& name);
+	ARMv7Thread(const std::string& name, u32 prio = 160, u32 stack = 256 * 1024);
 
 	union
 	{
@@ -119,6 +123,9 @@ public:
 	} ITSTATE;
 
 	u32 TLS = 0;
+	u64 rtime = 0;
+	u32 raddr = 0;
+	u32 rdata = 0;
 
 	struct perf_counter
 	{
@@ -133,7 +140,9 @@ public:
 	u32 stack_addr = 0;
 	u32 stack_size = 0;
 
-	std::function<void(ARMv7Thread&)> custom_task;
+	const std::string m_name;
+
+	atomic_t<void*> owner{};
 
 	const char* last_function = nullptr;
 
@@ -155,7 +164,7 @@ public:
 
 	void write_gpr(u32 n, u32 value, u32 size)
 	{
-		EXPECTS(n < 16);
+		verify(HERE), n <= 15;
 
 		if (n < 15)
 		{
@@ -169,7 +178,7 @@ public:
 
 	u32 read_gpr(u32 n)
 	{
-		EXPECTS(n < 16);
+		verify(HERE), n <= 15;
 
 		if (n < 15)
 		{
@@ -193,6 +202,9 @@ public:
 	}
 
 	void fast_call(u32 addr);
+
+	static u32 stack_push(u32 size, u32 align_v);
+	static void stack_pop_verbose(u32 addr, u32 size) noexcept;
 };
 
 template<typename T, typename = void>
@@ -205,7 +217,7 @@ template<typename T>
 struct arm_gpr_cast_impl<T, std::enable_if_t<std::is_integral<T>::value || std::is_enum<T>::value>>
 {
 	static_assert(sizeof(T) <= 4, "Too big integral type for arm_gpr_cast<>()");
-	static_assert(std::is_same<CV T, CV bool>::value == false, "bool type is deprecated in arm_gpr_cast<>(), use b8 instead");
+	static_assert(std::is_same<std::decay_t<T>, bool>::value == false, "bool type is deprecated in arm_gpr_cast<>(), use b8 instead");
 
 	static inline u32 to(const T& value)
 	{
@@ -229,6 +241,20 @@ struct arm_gpr_cast_impl<b8, void>
 	static inline b8 from(const u32 reg)
 	{
 		return reg != 0;
+	}
+};
+
+template<>
+struct arm_gpr_cast_impl<error_code, void>
+{
+	static inline u32 to(const error_code& code)
+	{
+		return code;
+	}
+
+	static inline error_code from(const u32 reg)
+	{
+		return not_an_error(reg);
 	}
 };
 

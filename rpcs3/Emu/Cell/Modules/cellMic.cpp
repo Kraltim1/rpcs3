@@ -4,7 +4,7 @@
 
 #include "cellMic.h"
 
-logs::channel cellMic("cellMic", logs::level::notice);
+logs::channel cellMic("cellMic");
 
 s32 cellMicInit()
 {
@@ -190,7 +190,7 @@ s32 cellMicGetStatus()
 
 s32 cellMicStopEx()
 {
-	throw EXCEPTION("Unexpected function");
+	fmt::throw_exception("Unexpected function" HERE);
 }
 
 s32 cellMicSysShareClose()

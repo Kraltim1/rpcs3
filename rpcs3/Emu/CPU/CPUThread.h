@@ -1,78 +1,70 @@
 #pragma once
 
-#include "Utilities/Thread.h"
-#include "Utilities/BitSet.h"
+#include "../Utilities/Thread.h"
+#include "../Utilities/bit_set.h"
 
-// CPU Thread Type
-enum class cpu_type : u32
-{
-	ppu, // PPU Thread
-	spu, // SPU Thread
-	arm, // ARMv7 Thread
-};
-
-// CPU Thread State flags
-enum struct cpu_state : u32
+// Thread state flags
+enum class cpu_flag : u32
 {
 	stop, // Thread not running (HLE, initial state)
 	exit, // Irreversible exit
-	suspend, // Thread paused
+	suspend, // Thread suspended
 	ret, // Callback return requested
 	signal, // Thread received a signal (HLE)
-	interrupt, // Thread interrupted
+	memory, // Thread must unlock memory mutex
 
 	dbg_global_pause, // Emulation paused
 	dbg_global_stop, // Emulation stopped
 	dbg_pause, // Thread paused
 	dbg_step, // Thread forced to pause after one step (one instruction, etc)
+
+	__bitset_enum_max
 };
 
-// CPU Thread State flags: pause state union
-constexpr bitset_t<cpu_state> cpu_state_pause = make_bitset(cpu_state::suspend, cpu_state::dbg_global_pause, cpu_state::dbg_pause);
+// Flag set for pause state
+constexpr bs_t<cpu_flag> cpu_state_pause = cpu_flag::suspend + cpu_flag::dbg_global_pause + cpu_flag::dbg_pause;
 
 class cpu_thread : public named_thread
 {
-	void on_task() override;
+	void on_task() override final;
 
 public:
 	virtual void on_stop() override;
 	virtual ~cpu_thread() override;
 
-	const std::string name;
-	const cpu_type type;
-	const id_value<> id{};
+	const u32 id;
 
-	cpu_thread(cpu_type type, const std::string& name);
+	cpu_thread(u32 id);
 
 	// Public thread state
-	atomic_t<bitset_t<cpu_state>> state{ cpu_state::stop };
-
-	// Public recursive sleep state counter
-	atomic_t<u32> sleep_counter{};
-
-	// Object associated with sleep state, possibly synchronization primitive (mutex, semaphore, etc.)
-	atomic_t<void*> owner{};
+	atomic_t<bs_t<cpu_flag>> state{+cpu_flag::stop};
 
 	// Process thread state, return true if the checker must return
-	bool check_status();
+	bool check_state();
 
-	// Increse sleep counter
-	void sleep()
+	// Process thread state
+	void test_state();
+
+	// Run thread
+	void run();
+
+	// Check thread type
+	u32 id_type()
 	{
-		if (!sleep_counter++) return; //handle_interrupt();
+		return id >> 24;
 	}
 
-	// Decrese sleep counter
-	void awake()
-	{
-		if (!--sleep_counter) owner = nullptr;
-	}
+	// Thread stats for external observation
+	static atomic_t<u64> g_threads_created, g_threads_deleted;
 
 	// Print CPU state
-	virtual std::string dump() const = 0;
-	virtual void cpu_init() {}
+	virtual std::string dump() const;
+
+	// Thread entry point function
 	virtual void cpu_task() = 0;
-	virtual bool handle_interrupt() { return false; }
+
+	// Callback for cpu_flag::suspend
+	virtual void cpu_sleep() {}
 };
 
 inline cpu_thread* get_current_cpu_thread() noexcept
@@ -81,27 +73,3 @@ inline cpu_thread* get_current_cpu_thread() noexcept
 
 	return g_tls_current_cpu_thread;
 }
-
-// Helper for cpu_thread.
-// 1) Calls sleep() and locks the thread in the constructor.
-// 2) Calls awake() and unlocks the thread in the destructor.
-class cpu_thread_lock final
-{
-	cpu_thread& m_thread;
-
-public:
-	cpu_thread_lock(const cpu_thread_lock&) = delete;
-
-	cpu_thread_lock(cpu_thread& thread)
-		: m_thread(thread)
-	{
-		m_thread.sleep();
-		m_thread->lock();
-	}
-
-	~cpu_thread_lock()
-	{
-		m_thread.awake();
-		m_thread->unlock();
-	}
-};

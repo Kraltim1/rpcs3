@@ -9,6 +9,10 @@ extern logs::channel sysPrxForUser;
 
 struct HeapInfo
 {
+	static const u32 id_base = 1;
+	static const u32 id_step = 1;
+	static const u32 id_count = 1023;
+
 	const std::string name;
 
 	HeapInfo(const char* name)
@@ -19,7 +23,7 @@ struct HeapInfo
 
 u32 _sys_heap_create_heap(vm::cptr<char> name, u32 arg2, u32 arg3, u32 arg4)
 {
-	sysPrxForUser.warning("_sys_heap_create_heap(name=*0x%x, arg2=0x%x, arg3=0x%x, arg4=0x%x)", name, arg2, arg3, arg4);
+	sysPrxForUser.warning("_sys_heap_create_heap(name=%s, arg2=0x%x, arg3=0x%x, arg4=0x%x)", name, arg2, arg3, arg4);
 
 	return idm::make<HeapInfo>(name.get_ptr());
 }
@@ -58,22 +62,22 @@ s32 _sys_heap_free(u32 heap, u32 addr)
 
 s32 _sys_heap_alloc_heap_memory()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 _sys_heap_get_mallinfo()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 _sys_heap_get_total_free_size()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 _sys_heap_stats()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 void sysPrxForUser_sys_heap_init()

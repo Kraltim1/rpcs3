@@ -4,51 +4,51 @@
 
 #include "sceVideodec.h"
 
-logs::channel sceVideodec("sceVideodec", logs::level::notice);
+logs::channel sceVideodec("sceVideodec");
 
 s32 sceVideodecInitLibrary(u32 codecType, vm::cptr<SceVideodecQueryInitInfo> pInitInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceVideodecTermLibrary(u32 codecType)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecQueryDecoderMemSize(u32 codecType, vm::cptr<SceAvcdecQueryDecoderInfo> pDecoderInfo, vm::ptr<SceAvcdecDecoderInfo> pMemInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecCreateDecoder(u32 codecType, vm::ptr<SceAvcdecCtrl> pCtrl, vm::cptr<SceAvcdecQueryDecoderInfo> pDecoderInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecDeleteDecoder(vm::ptr<SceAvcdecCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecDecodeAvailableSize(vm::ptr<SceAvcdecCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecDecode(vm::ptr<SceAvcdecCtrl> pCtrl, vm::cptr<SceAvcdecAu> pAu, vm::ptr<SceAvcdecArrayPicture> pArrayPicture)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecDecodeStop(vm::ptr<SceAvcdecCtrl> pCtrl, vm::ptr<SceAvcdecArrayPicture> pArrayPicture)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAvcdecDecodeFlush(vm::ptr<SceAvcdecCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

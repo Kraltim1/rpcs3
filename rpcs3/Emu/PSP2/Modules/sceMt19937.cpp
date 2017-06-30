@@ -4,16 +4,16 @@
 
 #include "sceMt19937.h"
 
-logs::channel sceMt19937("sceMt19937", logs::level::notice);
+logs::channel sceMt19937("sceMt19937");
 
 s32 sceMt19937Init(vm::ptr<SceMt19937Context> pCtx, u32 seed)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u32 sceMt19937UInt(vm::ptr<SceMt19937Context> pCtx)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

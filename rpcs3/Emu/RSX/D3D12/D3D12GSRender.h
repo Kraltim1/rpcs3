@@ -61,8 +61,6 @@ private:
 	data_cache m_texture_cache;
 	bool invalidate_address(u32 addr);
 
-	rsx::surface_info m_surface;
-
 	RSXVertexProgram m_vertex_program;
 	RSXFragmentProgram m_fragment_program;
 	PipelineStateObjectCache m_pso_cache;
@@ -123,6 +121,7 @@ private:
 	u32 m_current_transform_constants_buffer_descriptor_id;
 	ComPtr<ID3D12DescriptorHeap> m_current_texture_descriptors;
 	ComPtr<ID3D12DescriptorHeap> m_current_sampler_descriptors;
+
 public:
 	D3D12GSRender();
 	virtual ~D3D12GSRender();
@@ -141,16 +140,6 @@ private:
 	 * Returns whether the draw call is indexed or not and the vertex count to draw.
 	*/
 	std::tuple<bool, size_t, std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC> > upload_and_set_vertex_index_data(ID3D12GraphicsCommandList *command_list);
-
-	/**
-	 * Upload all enabled vertex attributes for vertex in ranges described by vertex_ranges.
-	 * A range in vertex_range is a pair whose first element is the index of the beginning of the
-	 * range, and whose second element is the number of vertex in this range.
-	 */
-	std::vector<D3D12_SHADER_RESOURCE_VIEW_DESC> upload_vertex_attributes(const std::vector<std::pair<u32, u32> > &vertex_ranges,
-		gsl::not_null<ID3D12GraphicsCommandList*> command_list);
-
-	std::tuple<D3D12_INDEX_BUFFER_VIEW, size_t> generate_index_buffer_for_emulated_primitives_array(const std::vector<std::pair<u32, u32> > &vertex_ranges);
 
 	void upload_and_bind_scale_offset_matrix(size_t descriptor_index);
 	void upload_and_bind_vertex_shader_constants(size_t descriptor_index);
@@ -184,6 +173,7 @@ private:
 	void copy_render_target_to_dma_location();
 
 protected:
+	virtual void on_init_thread() override;
 	virtual void on_exit() override;
 	virtual bool do_method(u32 cmd, u32 arg) override;
 	virtual void end() override;

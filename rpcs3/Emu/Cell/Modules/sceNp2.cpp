@@ -4,7 +4,7 @@
 #include "sceNp.h"
 #include "sceNp2.h"
 
-logs::channel sceNp2("sceNp2", logs::level::notice);
+logs::channel sceNp2("sceNp2");
 
 s32 sceNp2Init(u32 poolsize, vm::ptr<void> poolptr)
 {
@@ -31,7 +31,7 @@ s32 sceNpMatching2Init(u32 poolsize, s32 priority)
 {
 	sceNp2.todo("sceNpMatching2Init(poolsize=0x%x, priority=%d)", poolsize, priority);
 
-	return CELL_OK;
+	return SCE_NP_MATCHING2_ERROR_TIMEDOUT;
 }
 
 s32 sceNpMatching2Init2(u32 poolsize, s32 priority, vm::ptr<SceNpMatching2UtilityInitParam> param)
@@ -53,7 +53,7 @@ s32 sceNp2Term()
 	return CELL_OK;
 }
 
-s32 sceNpMatching2Term(PPUThread& ppu)
+s32 sceNpMatching2Term(ppu_thread& ppu)
 {
 	sceNp2.warning("sceNpMatching2Term()");
 
@@ -69,317 +69,380 @@ s32 sceNpMatching2Term2()
 
 s32 sceNpMatching2DestroyContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2LeaveLobby()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterLobbyMessageCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetWorldInfoList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterLobbyEventCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetLobbyMemberDataInternalList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SearchRoom()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SignalingGetConnectionStatus()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetUserInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetClanLobbyId()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetLobbyMemberDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2ContextStart()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2CreateServerContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetMemoryInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2LeaveRoom()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetRoomDataExternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SignalingGetConnectionInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SendRoomMessage()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2JoinLobby()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomMemberDataExternalList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2AbortRequest()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetServerInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetEventData()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomSlotInfoLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SendLobbyChatMessage()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2AbortContextStart()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomMemberIdListLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2JoinRoom()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomMemberDataInternalLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetCbQueueInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2KickoutRoomMember()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2ContextStartAsync()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetSignalingOptParam()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterContextCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SendRoomChatMessage()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetRoomDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SignalingGetPingInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetServerIdListLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpUtilBuildCdnUrl()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GrantRoomOwner()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2CreateContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetSignalingOptParamLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterSignalingCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2ClearEventData()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetUserInfoList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomMemberDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetRoomMemberDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2JoinProhibitiveRoom()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SignalingSetCtxOpt()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2DeleteServerContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetDefaultRequestOptParam()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterRoomEventCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomPasswordLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetRoomDataExternalList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2CreateJoinRoom()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SignalingGetCtxOpt()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetLobbyInfoList()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2GetLobbyMemberIdListLocal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SendLobbyInvitation()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2ContextStop()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2SetLobbyMemberDataInternal()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 s32 sceNpMatching2RegisterRoomMessageCallback()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(sceNp2);
+	return CELL_OK;
 }
 
 

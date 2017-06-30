@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "Utilities/Config.h"
 #include "Emu/System.h"
 #include "Emu/Cell/PPUModule.h"
 
@@ -7,37 +6,60 @@
 
 extern logs::channel cellSysutil;
 
-cfg::map_entry<u8> g_cfg_video_out_resolution(cfg::root.video, "Resolution", "1280x720",
+const extern std::unordered_map<video_resolution, std::pair<int, int>, value_hash<video_resolution>> g_video_out_resolution_map
 {
-	{ "1920x1080", CELL_VIDEO_OUT_RESOLUTION_1080 },
-	{ "1280x720", CELL_VIDEO_OUT_RESOLUTION_720 },
-	{ "720x480", CELL_VIDEO_OUT_RESOLUTION_480 },
-	{ "720x576", CELL_VIDEO_OUT_RESOLUTION_576 },
-	{ "1600x1080", CELL_VIDEO_OUT_RESOLUTION_1600x1080 },
-	{ "1440x1080", CELL_VIDEO_OUT_RESOLUTION_1440x1080 },
-	{ "1280x1080", CELL_VIDEO_OUT_RESOLUTION_1280x1080 },
-	{ "960x1080", CELL_VIDEO_OUT_RESOLUTION_960x1080 },
-});
-
-cfg::map_entry<u8> g_cfg_video_out_aspect_ratio(cfg::root.video, "Aspect ratio", "16x9",
-{
-	{ "4x3", CELL_VIDEO_OUT_ASPECT_4_3 },
-	{ "16x9", CELL_VIDEO_OUT_ASPECT_16_9 },
-});
-
-const extern std::unordered_map<u8, std::pair<int, int>> g_video_out_resolution_map
-{
-	{ CELL_VIDEO_OUT_RESOLUTION_1080,      { 1920, 1080 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_720,       { 1280, 720 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_480,       { 720, 480 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_576,       { 720, 576 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_1600x1080, { 1600, 1080 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_1440x1080, { 1440, 1080 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_1280x1080, { 1280, 1080 } },
-	{ CELL_VIDEO_OUT_RESOLUTION_960x1080,  { 960, 1080 } },
+	{ video_resolution::_1080,      { 1920, 1080 } },
+	{ video_resolution::_720,       { 1280, 720 } },
+	{ video_resolution::_480,       { 720, 480 } },
+	{ video_resolution::_576,       { 720, 576 } },
+	{ video_resolution::_1600x1080, { 1600, 1080 } },
+	{ video_resolution::_1440x1080, { 1440, 1080 } },
+	{ video_resolution::_1280x1080, { 1280, 1080 } },
+	{ video_resolution::_960x1080,  { 960, 1080 } },
 };
 
-ppu_error_code cellVideoOutGetState(u32 videoOut, u32 deviceIndex, vm::ptr<CellVideoOutState> state)
+const extern std::unordered_map<video_resolution, CellVideoOutResolutionId, value_hash<video_resolution>> g_video_out_resolution_id
+{
+	{ video_resolution::_1080,      CELL_VIDEO_OUT_RESOLUTION_1080 },
+	{ video_resolution::_720,       CELL_VIDEO_OUT_RESOLUTION_720 },
+	{ video_resolution::_480,       CELL_VIDEO_OUT_RESOLUTION_480 },
+	{ video_resolution::_576,       CELL_VIDEO_OUT_RESOLUTION_576 },
+	{ video_resolution::_1600x1080, CELL_VIDEO_OUT_RESOLUTION_1600x1080 },
+	{ video_resolution::_1440x1080, CELL_VIDEO_OUT_RESOLUTION_1440x1080 },
+	{ video_resolution::_1280x1080, CELL_VIDEO_OUT_RESOLUTION_1280x1080 },
+	{ video_resolution::_960x1080,  CELL_VIDEO_OUT_RESOLUTION_960x1080 },
+};
+
+const extern std::unordered_map<video_aspect, CellVideoOutDisplayAspect, value_hash<video_aspect>> g_video_out_aspect_id
+{
+	{ video_aspect::_auto, CELL_VIDEO_OUT_ASPECT_AUTO },
+	{ video_aspect::_16_9, CELL_VIDEO_OUT_ASPECT_16_9 },
+	{ video_aspect::_4_3,  CELL_VIDEO_OUT_ASPECT_4_3 },
+};
+
+template<>
+void fmt_class_string<CellVideoOutError>::format(std::string& out, u64 arg)
+{
+	format_enum(out, arg, [](auto error)
+	{
+		switch (error)
+		{
+		STR_CASE(CELL_VIDEO_OUT_ERROR_NOT_IMPLEMENTED);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_ILLEGAL_CONFIGURATION);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_ILLEGAL_PARAMETER);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_PARAMETER_OUT_OF_RANGE);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_DEVICE_NOT_FOUND);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_UNSUPPORTED_DISPLAY_MODE);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_CONDITION_BUSY);
+		STR_CASE(CELL_VIDEO_OUT_ERROR_VALUE_IS_NOT_SET);
+		}
+
+		return unknown;
+	});
+}
+
+error_code cellVideoOutGetState(u32 videoOut, u32 deviceIndex, vm::ptr<CellVideoOutState> state)
 {
 	cellSysutil.trace("cellVideoOutGetState(videoOut=%d, deviceIndex=%d, state=*0x%x)", videoOut, deviceIndex, state);
 
@@ -48,10 +70,10 @@ ppu_error_code cellVideoOutGetState(u32 videoOut, u32 deviceIndex, vm::ptr<CellV
 	case CELL_VIDEO_OUT_PRIMARY:
 		state->state = CELL_VIDEO_OUT_OUTPUT_STATE_ENABLED;
 		state->colorSpace = CELL_VIDEO_OUT_COLOR_SPACE_RGB;
-		state->displayMode.resolutionId = g_cfg_video_out_resolution.get(); // TODO
+		state->displayMode.resolutionId = g_video_out_resolution_id.at(g_cfg.video.resolution); // TODO
 		state->displayMode.scanMode = CELL_VIDEO_OUT_SCAN_MODE_PROGRESSIVE;
 		state->displayMode.conversion = CELL_VIDEO_OUT_DISPLAY_CONVERSION_NONE;
-		state->displayMode.aspect = g_cfg_video_out_aspect_ratio.get(); // TODO
+		state->displayMode.aspect = g_video_out_aspect_id.at(g_cfg.video.aspect_ratio); // TODO
 		state->displayMode.refreshRates = CELL_VIDEO_OUT_REFRESH_RATE_59_94HZ;
 		return CELL_OK;
 
@@ -63,7 +85,7 @@ ppu_error_code cellVideoOutGetState(u32 videoOut, u32 deviceIndex, vm::ptr<CellV
 	return CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT;
 }
 
-ppu_error_code cellVideoOutGetResolution(u32 resolutionId, vm::ptr<CellVideoOutResolution> resolution)
+error_code cellVideoOutGetResolution(u32 resolutionId, vm::ptr<CellVideoOutResolution> resolution)
 {
 	cellSysutil.trace("cellVideoOutGetResolution(resolutionId=0x%x, resolution=*0x%x)", resolutionId, resolution);
 
@@ -104,14 +126,21 @@ ppu_error_code cellVideoOutGetResolution(u32 resolutionId, vm::ptr<CellVideoOutR
 	return CELL_OK;
 }
 
-ppu_error_code cellVideoOutConfigure(u32 videoOut, vm::ptr<CellVideoOutConfiguration> config, vm::ptr<CellVideoOutOption> option, u32 waitForEvent)
+error_code cellVideoOutConfigure(u32 videoOut, vm::ptr<CellVideoOutConfiguration> config, vm::ptr<CellVideoOutOption> option, u32 waitForEvent)
 {
 	cellSysutil.warning("cellVideoOutConfigure(videoOut=%d, config=*0x%x, option=*0x%x, waitForEvent=%d)", videoOut, config, option, waitForEvent);
 
 	switch (videoOut)
 	{
 	case CELL_VIDEO_OUT_PRIMARY:
-		// TODO
+		if (config->resolutionId != g_video_out_resolution_id.at(g_cfg.video.resolution)
+			|| (config->format != CELL_VIDEO_OUT_BUFFER_COLOR_FORMAT_X8R8G8B8 &&
+				config->format != CELL_VIDEO_OUT_BUFFER_COLOR_FORMAT_X8B8G8R8 &&
+				config->format != CELL_VIDEO_OUT_BUFFER_COLOR_FORMAT_R16G16B16X16_FLOAT) 
+			|| (config->aspect != CELL_VIDEO_OUT_ASPECT_AUTO && config->aspect != g_video_out_aspect_id.at(g_cfg.video.aspect_ratio)))
+		{
+			return CELL_VIDEO_OUT_ERROR_ILLEGAL_CONFIGURATION;
+		}
 		return CELL_OK;
 
 	case CELL_VIDEO_OUT_SECONDARY:
@@ -121,7 +150,7 @@ ppu_error_code cellVideoOutConfigure(u32 videoOut, vm::ptr<CellVideoOutConfigura
 	return CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT;
 }
 
-ppu_error_code cellVideoOutGetConfiguration(u32 videoOut, vm::ptr<CellVideoOutConfiguration> config, vm::ptr<CellVideoOutOption> option)
+error_code cellVideoOutGetConfiguration(u32 videoOut, vm::ptr<CellVideoOutConfiguration> config, vm::ptr<CellVideoOutOption> option)
 {
 	cellSysutil.warning("cellVideoOutGetConfiguration(videoOut=%d, config=*0x%x, option=*0x%x)", videoOut, config, option);
 
@@ -131,10 +160,10 @@ ppu_error_code cellVideoOutGetConfiguration(u32 videoOut, vm::ptr<CellVideoOutCo
 	switch (videoOut)
 	{
 	case CELL_VIDEO_OUT_PRIMARY:
-		config->resolutionId = g_cfg_video_out_resolution.get();
+		config->resolutionId = g_video_out_resolution_id.at(g_cfg.video.resolution);
 		config->format = CELL_VIDEO_OUT_BUFFER_COLOR_FORMAT_X8R8G8B8;
-		config->aspect = g_cfg_video_out_aspect_ratio.get();
-		config->pitch = 4 * g_video_out_resolution_map.at(g_cfg_video_out_resolution.get()).first;
+		config->aspect = g_video_out_aspect_id.at(g_cfg.video.aspect_ratio);
+		config->pitch = 4 * g_video_out_resolution_map.at(g_cfg.video.resolution).first;
 
 		return CELL_OK;
 
@@ -146,7 +175,7 @@ ppu_error_code cellVideoOutGetConfiguration(u32 videoOut, vm::ptr<CellVideoOutCo
 	return CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT;
 }
 
-ppu_error_code cellVideoOutGetDeviceInfo(u32 videoOut, u32 deviceIndex, vm::ptr<CellVideoOutDeviceInfo> info)
+error_code cellVideoOutGetDeviceInfo(u32 videoOut, u32 deviceIndex, vm::ptr<CellVideoOutDeviceInfo> info)
 {
 	cellSysutil.warning("cellVideoOutGetDeviceInfo(videoOut=%d, deviceIndex=%d, info=*0x%x)", videoOut, deviceIndex, info);
 
@@ -155,7 +184,7 @@ ppu_error_code cellVideoOutGetDeviceInfo(u32 videoOut, u32 deviceIndex, vm::ptr<
 	// Use standard dummy values for now.
 	info->portType = CELL_VIDEO_OUT_PORT_HDMI;
 	info->colorSpace = CELL_VIDEO_OUT_COLOR_SPACE_RGB;
-	info->latency = 1000;
+	info->latency = 100;
 	info->availableModeCount = 1;
 	info->state = CELL_VIDEO_OUT_DEVICE_STATE_AVAILABLE;
 	info->rgbOutputRange = 1;
@@ -168,36 +197,38 @@ ppu_error_code cellVideoOutGetDeviceInfo(u32 videoOut, u32 deviceIndex, vm::ptr<
 	info->colorInfo.whiteX = 0xFFFF;
 	info->colorInfo.whiteY = 0xFFFF;
 	info->colorInfo.gamma = 100;
-	info->availableModes[0].aspect = 0;
-	info->availableModes[0].conversion = 0;
-	info->availableModes[0].refreshRates = 0xF;
-	info->availableModes[0].resolutionId = 1;
-	info->availableModes[0].scanMode = 0;
-
+	info->availableModes[0].aspect = g_video_out_aspect_id.at(g_cfg.video.aspect_ratio);
+	info->availableModes[0].conversion = CELL_VIDEO_OUT_DISPLAY_CONVERSION_NONE;
+	info->availableModes[0].refreshRates =  CELL_VIDEO_OUT_REFRESH_RATE_60HZ | CELL_VIDEO_OUT_REFRESH_RATE_59_94HZ;
+	info->availableModes[0].resolutionId = g_video_out_resolution_id.at(g_cfg.video.resolution);
+	info->availableModes[0].scanMode = CELL_VIDEO_OUT_SCAN_MODE_PROGRESSIVE;
 	return CELL_OK;
 }
 
-ppu_error_code cellVideoOutGetNumberOfDevice(u32 videoOut)
+error_code cellVideoOutGetNumberOfDevice(u32 videoOut)
 {
 	cellSysutil.warning("cellVideoOutGetNumberOfDevice(videoOut=%d)", videoOut);
 
 	switch (videoOut)
 	{
-	case CELL_VIDEO_OUT_PRIMARY: return NOT_AN_ERROR(1);
-	case CELL_VIDEO_OUT_SECONDARY: return NOT_AN_ERROR(0);
+	case CELL_VIDEO_OUT_PRIMARY: return not_an_error(1);
+	case CELL_VIDEO_OUT_SECONDARY: return not_an_error(0);
 	}
 
 	return CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT;
 }
 
-ppu_error_code cellVideoOutGetResolutionAvailability(u32 videoOut, u32 resolutionId, u32 aspect, u32 option)
+error_code cellVideoOutGetResolutionAvailability(u32 videoOut, u32 resolutionId, u32 aspect, u32 option)
 {
 	cellSysutil.warning("cellVideoOutGetResolutionAvailability(videoOut=%d, resolutionId=0x%x, aspect=%d, option=%d)", videoOut, resolutionId, aspect, option);
 
 	switch (videoOut)
 	{
-	case CELL_VIDEO_OUT_PRIMARY: return NOT_AN_ERROR(1);
-	case CELL_VIDEO_OUT_SECONDARY: return NOT_AN_ERROR(0);
+	case CELL_VIDEO_OUT_PRIMARY: return not_an_error(
+		resolutionId == g_video_out_resolution_id.at(g_cfg.video.resolution)
+		&& (aspect == CELL_VIDEO_OUT_ASPECT_AUTO || aspect == g_video_out_aspect_id.at(g_cfg.video.aspect_ratio))
+	);
+	case CELL_VIDEO_OUT_SECONDARY: return not_an_error(0);
 	}
 
 	return CELL_VIDEO_OUT_ERROR_UNSUPPORTED_VIDEO_OUT;
@@ -205,29 +236,29 @@ ppu_error_code cellVideoOutGetResolutionAvailability(u32 videoOut, u32 resolutio
 
 s32 cellVideoOutGetConvertCursorColorInfo(vm::ptr<u8> rgbOutputRange)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 cellVideoOutDebugSetMonitorType(u32 videoOut, u32 monitorType)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 cellVideoOutRegisterCallback(u32 slot, vm::ptr<CellVideoOutCallback> function, vm::ptr<void> userData)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 cellVideoOutUnregisterCallback(u32 slot)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 
 void cellSysutil_VideoOut_init()
 {
 	REG_FUNC(cellSysutil, cellVideoOutGetState);
-	REG_FUNC(cellSysutil, cellVideoOutGetResolution, MFF_PERFECT);
+	REG_FUNC(cellSysutil, cellVideoOutGetResolution).flags = MFF_PERFECT;
 	REG_FUNC(cellSysutil, cellVideoOutConfigure);
 	REG_FUNC(cellSysutil, cellVideoOutGetConfiguration);
 	REG_FUNC(cellSysutil, cellVideoOutGetDeviceInfo);

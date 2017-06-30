@@ -4,8 +4,11 @@
 #include "Emu/Cell/PPUModule.h"
 
 #include "cellMusic.h"
+#include "cellSysutil.h"
 
-logs::channel cellMusic("cellMusic", logs::level::notice);
+namespace vm { using namespace ps3; }
+
+logs::channel cellMusic("cellMusic");
 
 struct music2_t
 {
@@ -15,97 +18,116 @@ struct music2_t
 
 s32 cellMusicGetSelectionContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSetSelectionContext2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSetVolume2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetContentsId()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSetSelectionContext()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicInitialize2SystemWorkload()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetPlaybackStatus2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetContentsId2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicFinalize()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicInitializeSystemWorkload()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicInitialize()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicFinalize2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetSelectionContext2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetVolume()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetPlaybackStatus()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSetPlaybackCommand2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSetPlaybackCommand()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSelectContents2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicSelectContents()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicInitialize2(s32 mode, s32 spuPriority, vm::ptr<CellMusic2Callback> func, vm::ptr<void> userData)
@@ -122,7 +144,7 @@ s32 cellMusicInitialize2(s32 mode, s32 spuPriority, vm::ptr<CellMusic2Callback> 
 	music->func = func;
 	music->userData = userData;
 
-	Emu.GetCallbackManager().Register([=](PPUThread& ppu) -> s32
+	sysutil_register_cb([=](ppu_thread& ppu) -> s32
 	{
 		func(ppu, CELL_MUSIC2_EVENT_INITIALIZE_RESULT, vm::make_var<s32>(CELL_OK), userData);
 		return CELL_OK;
@@ -133,12 +155,14 @@ s32 cellMusicInitialize2(s32 mode, s32 spuPriority, vm::ptr<CellMusic2Callback> 
 
 s32 cellMusicSetVolume()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 s32 cellMusicGetVolume2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellMusic); 
+	return CELL_OK;
 }
 
 

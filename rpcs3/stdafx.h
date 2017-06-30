@@ -8,9 +8,9 @@
 
 #define NOMINMAX
 
-#ifndef __STDC_CONSTANT_MACROS
-#define __STDC_CONSTANT_MACROS
-#endif
+//#ifndef __STDC_CONSTANT_MACROS
+//#define __STDC_CONSTANT_MACROS
+//#endif
 
 #if defined(MSVC_CRT_MEMLEAK_DETECTION) && defined(_DEBUG) && !defined(DBG_NEW)
 	#define DBG_NEW new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -19,11 +19,23 @@
 
 #pragma warning( disable : 4351 )
 
+// MSVC bug workaround
+#ifdef _MSC_VER
+namespace std { inline namespace literals { inline namespace chrono_literals {}}}
+#endif
+
+#include "Utilities/types.h"
+#include "Utilities/BEType.h"
+#include "Utilities/Atomic.h"
+#include "Utilities/StrFmt.h"
+#include "Utilities/File.h"
+#include "Utilities/Log.h"
+
 #include <cstdlib>
-#include <cstdint>
-#include <climits>
 #include <cstring>
+#include <climits>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <memory>
 #include <vector>
@@ -31,24 +43,4 @@
 #include <functional>
 #include <unordered_map>
 
-// MSVC bug workaround
-#ifdef _MSC_VER
-namespace std { inline namespace literals { inline namespace chrono_literals {}}}
-#endif
-
 using namespace std::literals;
-
-// Obsolete, throw fmt::exception directly. Use 'HERE' macro, if necessary.
-#define EXCEPTION(format_str, ...) fmt::exception("%s(): " format_str HERE, __FUNCTION__, ##__VA_ARGS__)
-
-#define _PRGNAME_ "RPCS3"
-#define _PRGVER_ "0.0.0.9"
-
-#include "Utilities/types.h"
-#include "Utilities/Macro.h"
-#include "Utilities/Platform.h"
-#include "Utilities/BEType.h"
-#include "Utilities/Atomic.h"
-#include "Utilities/StrFmt.h"
-#include "Utilities/File.h"
-#include "Utilities/Log.h"

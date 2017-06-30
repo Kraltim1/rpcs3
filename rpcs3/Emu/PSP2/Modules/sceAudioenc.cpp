@@ -4,46 +4,46 @@
 
 #include "sceAudioenc.h"
 
-logs::channel sceAudioenc("sceAudioenc", logs::level::notice);
+logs::channel sceAudioenc("sceAudioenc");
 
 s32 sceAudioencInitLibrary(u32 codecType, vm::ptr<SceAudioencInitParam> pInitParam)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencTermLibrary(u32 codecType)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencCreateEncoder(vm::ptr<SceAudioencCtrl> pCtrl, u32 codecType)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencDeleteEncoder(vm::ptr<SceAudioencCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencEncode(vm::ptr<SceAudioencCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencClearContext(vm::ptr<SceAudioencCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencGetOptInfo(vm::ptr<SceAudioencCtrl> pCtrl)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceAudioencGetInternalError(vm::ptr<SceAudioencCtrl> pCtrl, vm::ptr<s32> pInternalError)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

@@ -4,16 +4,16 @@
 
 #include "sceLiveArea.h"
 
-logs::channel sceLiveArea("sceLiveArea", logs::level::notice);
+logs::channel sceLiveArea("sceLiveArea");
 
 s32 sceLiveAreaResourceReplaceAll(vm::cptr<char> dirpath)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceLiveAreaResourceGetStatus()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 #define REG_FUNC(nid, name) REG_FNID(SceLiveArea, nid, name)

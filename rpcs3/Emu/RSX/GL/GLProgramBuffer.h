@@ -11,27 +11,21 @@ struct GLTraits
 	using pipeline_properties = void*;
 
 	static
-	void recompile_fragment_program(const RSXFragmentProgram &RSXFP, fragment_program_type& fragmentProgramData, size_t ID)
+	void recompile_fragment_program(const RSXFragmentProgram &RSXFP, fragment_program_type& fragmentProgramData, size_t /*ID*/)
 	{
 		fragmentProgramData.Decompile(RSXFP);
 		fragmentProgramData.Compile();
-		//checkForGlError("m_fragment_prog.Compile");
-
-		fs::file(fs::get_config_dir() + "FragmentProgram.glsl", fs::rewrite).write(fragmentProgramData.shader);
 	}
 
 	static
-	void recompile_vertex_program(const RSXVertexProgram &RSXVP, vertex_program_type& vertexProgramData, size_t ID)
+	void recompile_vertex_program(const RSXVertexProgram &RSXVP, vertex_program_type& vertexProgramData, size_t /*ID*/)
 	{
 		vertexProgramData.Decompile(RSXVP);
 		vertexProgramData.Compile();
-		//checkForGlError("m_vertex_prog.Compile");
-
-		fs::file(fs::get_config_dir() + "VertexProgram.glsl", fs::rewrite).write(vertexProgramData.shader);
 	}
 
 	static
-	pipeline_storage_type build_pipeline(const vertex_program_type &vertexProgramData, const fragment_program_type &fragmentProgramData, const pipeline_properties &pipelineProperties)
+	pipeline_storage_type build_pipeline(const vertex_program_type &vertexProgramData, const fragment_program_type &fragmentProgramData, const pipeline_properties&)
 	{
 		pipeline_storage_type result;
 		__glcheck result.create()
@@ -43,6 +37,41 @@ struct GLTraits
 			.bind_fragment_data_location("ocol3", 3)
 			.make();
 		__glcheck result.use();
+
+		//Progam locations are guaranteed to not change after linking
+		//Texture locations are simply bound to the TIUs so this can be done once
+		for (int i = 0; i < rsx::limits::fragment_textures_count; ++i)
+		{
+			int location;
+			if (result.uniforms.has_location("tex" + std::to_string(i), &location))
+				result.uniforms[location] = i;
+		}
+
+		for (int i = 0; i < rsx::limits::vertex_textures_count; ++i)
+		{
+			int location;
+			if (result.uniforms.has_location("vtex" + std::to_string(i), &location))
+				result.uniforms[location] = (i + rsx::limits::fragment_textures_count);
+		}
+
+		//We use texture buffers for vertex attributes. Bind these here as well
+		//as they are guaranteed to be fixed (1 to 1 mapping)
+		std::array<const char*, 16> s_reg_table =
+		{
+			"in_pos_buffer", "in_weight_buffer", "in_normal_buffer",
+			"in_diff_color_buffer", "in_spec_color_buffer",
+			"in_fog_buffer",
+			"in_point_size_buffer", "in_7_buffer",
+			"in_tc0_buffer", "in_tc1_buffer", "in_tc2_buffer", "in_tc3_buffer",
+			"in_tc4_buffer", "in_tc5_buffer", "in_tc6_buffer", "in_tc7_buffer"
+		};
+
+		for (int i = 0; i < rsx::limits::vertex_count; ++i)
+		{
+			int location;
+			if (result.uniforms.has_location(s_reg_table[i], &location))
+				result.uniforms[location] = (i + rsx::limits::fragment_textures_count + rsx::limits::vertex_textures_count);
+		}
 
 		LOG_NOTICE(RSX, "*** prog id = %d", result.id());
 		LOG_NOTICE(RSX, "*** vp id = %d", vertexProgramData.id);

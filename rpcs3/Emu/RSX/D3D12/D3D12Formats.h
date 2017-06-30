@@ -5,32 +5,32 @@
 /**
  * Convert GCM blend operator code to D3D12 one
  */
-D3D12_BLEND_OP get_blend_op(u16 op);
+D3D12_BLEND_OP get_blend_op(rsx::blend_equation op);
 
 /**
  * Convert GCM blend factor code to D3D12 one
  */
-D3D12_BLEND get_blend_factor(u16 factor);
+D3D12_BLEND get_blend_factor(rsx::blend_factor factor);
 
 /**
  * Convert GCM blend factor code to D3D12 one for alpha component
  */
-D3D12_BLEND get_blend_factor_alpha(u16 factor);
+D3D12_BLEND get_blend_factor_alpha(rsx::blend_factor factor);
 
 /**
 * Convert GCM logic op code to D3D12 one
 */
-D3D12_LOGIC_OP get_logic_op(u32 op);
+D3D12_LOGIC_OP get_logic_op(rsx::logic_op op);
 
 /**
  * Convert GCM stencil op code to D3D12 one
  */
-D3D12_STENCIL_OP get_stencil_op(u32 op);
+D3D12_STENCIL_OP get_stencil_op(rsx::stencil_op op);
 
 /**
  * Convert GCM comparison function code to D3D12 one.
  */
-D3D12_COMPARISON_FUNC get_compare_func(u32 op);
+D3D12_COMPARISON_FUNC get_compare_func(rsx::comparison_function op);
 
 /**
  * Convert GCM texture format to an equivalent one supported by D3D12.
@@ -89,9 +89,19 @@ DXGI_FORMAT get_depth_stencil_typeless_surface_format(rsx::surface_depth_format 
 DXGI_FORMAT get_depth_samplable_surface_format(rsx::surface_depth_format format);
 
 /**
+* Get block size in bytes for a DXGI_FORMAT
+*/
+UCHAR get_dxgi_texel_size(DXGI_FORMAT format);
+
+/**
  * Convert front face value to bool value telling wheter front face is counterclockwise or not
  */
-BOOL get_front_face_ccw(u32 set_front_face_value);
+BOOL get_front_face_ccw(rsx::front_face set_front_face_value);
+
+/**
+* Convert cull face value to a D3D12_CULL_MODE telling wheter cull face is front or back
+*/
+D3D12_CULL_MODE get_cull_face(rsx::cull_face set_cull_face_value);
 
 /**
  * Convert index type to DXGI_FORMAT
@@ -106,4 +116,4 @@ DXGI_FORMAT get_vertex_attribute_format(rsx::vertex_base_type type, u8 size);
 /**
  * Convert scissor register value to D3D12_RECT
  */
-D3D12_RECT get_scissor(u32 horizontal, u32 vertical);
+D3D12_RECT get_scissor(u16 clip_origin_x, u16 clip_origin_y, u16 clip_w, u16 clip_h);

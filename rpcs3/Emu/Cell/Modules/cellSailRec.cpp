@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "Emu/Cell/PPUModule.h"
 
-logs::channel cellSailRec("cellSailRec", logs::level::notice);
+logs::channel cellSailRec("cellSailRec");
 
 // Error Codes
 enum
@@ -256,6 +256,9 @@ s32 cellSailRecorderDumpImage()
 
 DECLARE(ppu_module_manager::cellSailRec)("cellSailRec", []()
 {
+	static ppu_static_module cellMp4("cellMp4");
+	static ppu_static_module cellApostSrcMini("cellApostSrcMini");
+
 	REG_FUNC(cellSailRec, cellSailProfileSetEsAudioParameter);
 	REG_FUNC(cellSailRec, cellSailProfileSetEsVideoParameter);
 	REG_FUNC(cellSailRec, cellSailProfileSetStreamParameter);

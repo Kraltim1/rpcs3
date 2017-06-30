@@ -13,7 +13,7 @@ public:
 private:
 	u32 DisAsmBranchTarget(const s32 imm)
 	{
-		return ppu_branch_target(dump_pc, imm);
+		return dump_pc + (imm & ~3);
 	}
 
 private:
@@ -397,7 +397,6 @@ public:
 	void ADDI(ppu_opcode_t op);
 	void ADDIS(ppu_opcode_t op);
 	void BC(ppu_opcode_t op);
-	void HACK(ppu_opcode_t op);
 	void SC(ppu_opcode_t op);
 	void B(ppu_opcode_t op);
 	void MCRF(ppu_opcode_t op);

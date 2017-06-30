@@ -2,7 +2,15 @@
 #include "GCM.h"
 #include "RSXTexture.h"
 
-enum
+enum register_type
+{
+	RSX_FP_REGISTER_TYPE_TEMP = 0,
+	RSX_FP_REGISTER_TYPE_INPUT = 1,
+	RSX_FP_REGISTER_TYPE_CONSTANT = 2,
+	RSX_FP_REGISTER_TYPE_UNKNOWN = 3,
+};
+
+enum fp_opcode
 {
 	RSX_FP_OPCODE_NOP        = 0x00, // No-Operation
 	RSX_FP_OPCODE_MOV        = 0x01, // Move
@@ -213,15 +221,23 @@ struct RSXFragmentProgram
 	u32 offset;
 	u32 ctrl;
 	u16 unnormalized_coords;
-	rsx::comparaison_function alpha_func;
+	u16 redirected_textures;
+	u16 shadow_textures;
+	rsx::comparison_function alpha_func;
 	bool front_back_color_enabled : 1;
 	bool back_color_diffuse_output : 1;
 	bool back_color_specular_output : 1;
+	bool front_color_diffuse_output : 1;
+	bool front_color_specular_output : 1;
 	u32 texture_dimensions;
 	rsx::window_origin origin_mode;
 	rsx::window_pixel_center pixel_center_mode;
 	rsx::fog_mode fog_equation;
 	u16 height;
+
+	float texture_pitch_scale[16];
+	u8 textures_alpha_kill[16];
+	u32 textures_zfunc[16];
 
 	rsx::texture_dimension_extended get_texture_dimension(u8 id) const
 	{

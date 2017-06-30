@@ -5,142 +5,128 @@
 
 #include "Emu/Cell/ErrorCodes.h"
 #include "Emu/Cell/PPUThread.h"
+#include "Emu/Cell/PPUOpcodes.h"
 #include "sys_interrupt.h"
 
-logs::channel sys_interrupt("sys_interrupt", logs::level::notice);
+namespace vm { using namespace ps3; }
 
-void lv2_int_serv_t::join(PPUThread& ppu, lv2_lock_t lv2_lock)
+logs::channel sys_interrupt("sys_interrupt");
+
+void lv2_int_serv::exec()
 {
-	// Use is_joining to stop interrupt thread and signal
-	thread->is_joining = true;
-	(*thread)->notify();
+	thread->cmd_list
+	({
+		{ ppu_cmd::set_args, 2 }, arg1, arg2,
+		{ ppu_cmd::lle_call, 2 },
+		{ ppu_cmd::sleep, 0 }
+	});
 
-	// Start joining
-	while (!(thread->state & cpu_state::exit))
-	{
-		CHECK_EMU_STATUS;
-
-		get_current_thread_cv().wait_for(lv2_lock, 1ms);
-	}
-
-	// Cleanup
-	idm::remove<lv2_int_serv_t>(id);
-	idm::remove<PPUThread>(thread->id);
+	thread->notify();
 }
 
-s32 sys_interrupt_tag_destroy(u32 intrtag)
+void lv2_int_serv::join()
+{
+	// Enqueue _sys_ppu_thread_exit call
+	thread->cmd_list
+	({
+		{ ppu_cmd::set_args, 1 }, u64{0},
+		{ ppu_cmd::set_gpr, 11 }, u64{41},
+		{ ppu_cmd::opcode, ppu_instructions::SC(0) },
+	});
+
+	thread->notify();
+	thread->join();
+}
+
+error_code sys_interrupt_tag_destroy(u32 intrtag)
 {
 	sys_interrupt.warning("sys_interrupt_tag_destroy(intrtag=0x%x)", intrtag);
 
-	LV2_LOCK;
+	const auto tag = idm::withdraw<lv2_obj, lv2_int_tag>(intrtag, [](lv2_int_tag& tag) -> CellError
+	{
+		if (!tag.handler.expired())
+		{
+			return CELL_EBUSY;
+		}
 
-	const auto tag = idm::get<lv2_int_tag_t>(intrtag);
+		return {};
+	});
 
 	if (!tag)
 	{
 		return CELL_ESRCH;
 	}
 
-	if (tag->handler)
+	if (tag.ret)
 	{
-		return CELL_EBUSY;
+		return tag.ret;
 	}
-
-	idm::remove<lv2_int_tag_t>(intrtag);
 
 	return CELL_OK;
 }
 
-s32 _sys_interrupt_thread_establish(vm::ptr<u32> ih, u32 intrtag, u32 intrthread, u64 arg1, u64 arg2)
+error_code _sys_interrupt_thread_establish(vm::ptr<u32> ih, u32 intrtag, u32 intrthread, u64 arg1, u64 arg2)
 {
 	sys_interrupt.warning("_sys_interrupt_thread_establish(ih=*0x%x, intrtag=0x%x, intrthread=0x%x, arg1=0x%llx, arg2=0x%llx)", ih, intrtag, intrthread, arg1, arg2);
 
-	LV2_LOCK;
+	CellError error = CELL_EAGAIN;
 
-	// Get interrupt tag
-	const auto tag = idm::get<lv2_int_tag_t>(intrtag);
-
-	if (!tag)
+	const u32 id = idm::import<lv2_obj, lv2_int_serv>([&]()
 	{
-		return CELL_ESRCH;
-	}
+		std::shared_ptr<lv2_int_serv> result;
 
-	// Get interrupt thread
-	const auto it = idm::get<PPUThread>(intrthread);
+		// Get interrupt tag
+		const auto tag = idm::check_unlocked<lv2_obj, lv2_int_tag>(intrtag);
 
-	if (!it)
-	{
-		return CELL_ESRCH;
-	}
-
-	// If interrupt thread is running, it's already established on another interrupt tag
-	if (!(it->state & cpu_state::stop))
-	{
-		return CELL_EAGAIN;
-	}
-
-	// It's unclear if multiple handlers can be established on single interrupt tag
-	if (tag->handler)
-	{
-		sys_interrupt.error("_sys_interrupt_thread_establish(): handler service already exists (intrtag=0x%x) -> CELL_ESTAT", intrtag);
-		return CELL_ESTAT;
-	}
-
-	const auto handler = idm::make_ptr<lv2_int_serv_t>(it);
-
-	tag->handler = handler;
-
-	it->custom_task = [handler, arg1, arg2](PPUThread& ppu)
-	{
-		const u32 pc   = ppu.pc;
-		const u32 rtoc = ppu.GPR[2];
-
-		LV2_LOCK;
-
-		while (!ppu.is_joining)
+		if (!tag)
 		{
-			CHECK_EMU_STATUS;
-
-			// call interrupt handler until int status is clear
-			if (handler->signal)
-			{
-				if (lv2_lock) lv2_lock.unlock();
-
-				ppu.GPR[3] = arg1;
-				ppu.GPR[4] = arg2;
-				ppu.fast_call(pc, rtoc);
-
-				handler->signal--;
-				continue;
-			}
-
-			if (!lv2_lock)
-			{
-				lv2_lock.lock();
-				continue;
-			}
-
-			get_current_thread_cv().wait(lv2_lock);
+			error = CELL_ESRCH;
+			return result;
 		}
 
-		ppu.state += cpu_state::exit;
-	};
+		// Get interrupt thread
+		const auto it = idm::get_unlocked<ppu_thread>(intrthread);
 
-	it->state -= cpu_state::stop;
-	(*it)->lock_notify();
+		if (!it)
+		{
+			error = CELL_ESRCH;
+			return result;
+		}
 
-	*ih = handler->id;
+		// If interrupt thread is running, it's already established on another interrupt tag
+		if (!test(it->state & cpu_flag::stop))
+		{
+			error = CELL_EAGAIN;
+			return result;
+		}
 
-	return CELL_OK;
+		// It's unclear if multiple handlers can be established on single interrupt tag
+		if (!tag->handler.expired())
+		{
+			error = CELL_ESTAT;
+			return result;
+		}
+
+		result = std::make_shared<lv2_int_serv>(it, arg1, arg2);
+		tag->handler = result;
+		it->run();
+		return result;
+	});
+
+	if (id)
+	{
+		*ih = id;
+		return CELL_OK;
+	}
+
+	return error;
 }
 
-s32 _sys_interrupt_thread_disestablish(PPUThread& ppu, u32 ih, vm::ptr<u64> r13)
+error_code _sys_interrupt_thread_disestablish(ppu_thread& ppu, u32 ih, vm::ptr<u64> r13)
 {
 	sys_interrupt.warning("_sys_interrupt_thread_disestablish(ih=0x%x, r13=*0x%x)", ih, r13);
 
-	LV2_LOCK;
-
-	const auto handler = idm::get<lv2_int_serv_t>(ih);
+	const auto handler = idm::withdraw<lv2_obj, lv2_int_serv>(ih);
 
 	if (!handler)
 	{
@@ -148,21 +134,19 @@ s32 _sys_interrupt_thread_disestablish(PPUThread& ppu, u32 ih, vm::ptr<u64> r13)
 	}
 
 	// Wait for sys_interrupt_thread_eoi() and destroy interrupt thread
-	handler->join(ppu, lv2_lock);
+	handler->join();
 
 	// Save TLS base
-	*r13 = handler->thread->GPR[13];
+	*r13 = handler->thread->gpr[13];
 
 	return CELL_OK;
 }
 
-void sys_interrupt_thread_eoi(PPUThread& ppu)
+void sys_interrupt_thread_eoi(ppu_thread& ppu)
 {
+	vm::temporary_unlock(ppu);
+
 	sys_interrupt.trace("sys_interrupt_thread_eoi()");
 
-	// TODO: maybe it should actually unwind the stack of PPU thread?
-
-	ppu.GPR[1] = align(ppu.stack_addr + ppu.stack_size, 0x200) - 0x200; // supercrutch to bypass stack check
-
-	ppu.state += cpu_state::ret;
+	ppu.state += cpu_flag::ret;
 }

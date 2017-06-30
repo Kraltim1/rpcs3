@@ -1,5 +1,10 @@
 #include "stdafx.h"
 #include "AudioDumper.h"
+#include "AudioThread.h"
+
+AudioThread::~AudioThread()
+{
+}
 
 AudioDumper::AudioDumper(u16 ch)
 	: m_header(ch)
@@ -24,7 +29,7 @@ void AudioDumper::WriteData(const void* buffer, u32 size)
 {
 	if (GetCh())
 	{
-		VERIFY(m_output.write(buffer, size) == size);
+		verify(HERE), size, m_output.write(buffer, size) == size;
 		m_header.Size += size;
 		m_header.RIFF.Size += size;
 	}

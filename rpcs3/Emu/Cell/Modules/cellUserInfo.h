@@ -2,11 +2,9 @@
 
 namespace vm { using namespace ps3; }
 
-// Return Codes
-enum
+// Error Codes
+enum CellUserInfoError : u32
 {
-	CELL_USERINFO_RET_OK          = 0,
-	CELL_USERINFO_RET_CANCEL      = 1,
 	CELL_USERINFO_ERROR_BUSY      = 0x8002c301,
 	CELL_USERINFO_ERROR_INTERNAL  = 0x8002c302,
 	CELL_USERINFO_ERROR_PARAM     = 0x8002c303,
@@ -61,3 +59,5 @@ struct CellUserInfoTypeSet
 	be_t<u32> type; // CellUserInfoListType
 	vm::bptr<void> reserved;
 };
+
+using CellUserInfoFinishCallback = void(s32 result, vm::ptr<CellUserInfoUserStat> selectedUser, vm::ptr<void> userdata);

@@ -5,39 +5,46 @@
 #include "cellAudioIn.h"
 #include "cellAudioOut.h"
 #include "cellVideoOut.h"
+#include "cellSysutil.h"
 
-logs::channel cellAvconfExt("cellAvconfExt", logs::level::notice);
+logs::channel cellAvconfExt("cellAvconfExt");
 
 vm::gvar<f32> g_gamma; // TODO
 
 s32 cellAudioOutUnregisterDevice()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioOutGetDeviceInfo2()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutSetXVColor()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutSetupDisplay()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioInGetDeviceInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutConvertCursorColor()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutGetGamma(u32 videoOut, vm::ptr<f32> gamma)
@@ -56,12 +63,14 @@ s32 cellVideoOutGetGamma(u32 videoOut, vm::ptr<f32> gamma)
 
 s32 cellAudioInGetAvailableDeviceInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioOutGetAvailableDeviceInfo()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutSetGamma(u32 videoOut, f32 gamma)
@@ -85,27 +94,32 @@ s32 cellVideoOutSetGamma(u32 videoOut, f32 gamma)
 
 s32 cellAudioOutRegisterDevice()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioOutSetDeviceMode()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioInSetDeviceMode()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioInRegisterDevice()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellAudioInUnregisterDevice()
 {
-	throw EXCEPTION("");
+	UNIMPLEMENTED_FUNC(cellAvconfExt); 
+	return CELL_OK;
 }
 
 s32 cellVideoOutGetScreenSize(u32 videoOut, vm::ptr<float> screenSize)
@@ -132,11 +146,11 @@ s32 cellVideoOutGetScreenSize(u32 videoOut, vm::ptr<float> screenSize)
 
 DECLARE(ppu_module_manager::cellAvconfExt)("cellSysutilAvconfExt", []()
 {
-	REG_VNID(cellSysutilAvconfExt, 0x00000000, g_gamma, []
+	REG_VNID(cellSysutilAvconfExt, 0x00000000u, g_gamma).init = []
 	{
 		// Test
 		*g_gamma = 1.0f;
-	});
+	};
 
 	REG_FUNC(cellSysutilAvconfExt, cellAudioOutUnregisterDevice);
 	REG_FUNC(cellSysutilAvconfExt, cellAudioOutGetDeviceInfo2);

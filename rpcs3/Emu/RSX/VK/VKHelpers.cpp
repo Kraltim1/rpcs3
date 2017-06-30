@@ -3,34 +3,46 @@
 
 namespace vk
 {
-	context *g_current_vulkan_ctx = nullptr;
+	context* g_current_vulkan_ctx = nullptr;
 	render_device g_current_renderer;
 
 	texture g_null_texture;
 
-	VkSampler g_null_sampler = nullptr;
+	VkSampler g_null_sampler      = nullptr;
 	VkImageView g_null_image_view = nullptr;
 
-	VKAPI_ATTR void *VKAPI_CALL mem_realloc(void *pUserData, void *pOriginal, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
-	{
-		return realloc(pOriginal, size);
-	}
+	bool g_cb_no_interrupt_flag = false;
 
-	VKAPI_ATTR void *VKAPI_CALL mem_alloc(void *pUserData, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
+	VKAPI_ATTR void* VKAPI_CALL mem_realloc(void* pUserData, void* pOriginal, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
 	{
-#ifdef _WIN32
-		return _aligned_malloc(size, alignment);
+#ifdef _MSC_VER
+		return _aligned_realloc(pOriginal, size, alignment);
+#elif _WIN32
+		return __mingw_aligned_realloc(pOriginal, size, alignment);
 #else
-		return malloc(size);
+		std::abort();
 #endif
 	}
 
-	VKAPI_ATTR void VKAPI_CALL mem_free(void *pUserData, void *pMemory)
+	VKAPI_ATTR void* VKAPI_CALL mem_alloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
 	{
-#ifdef _WIN32
-		_aligned_free(pMemory);
+#ifdef _MSC_VER
+		return _aligned_malloc(size, alignment);
+#elif _WIN32
+		return __mingw_aligned_malloc(size, alignment);
 #else
-		free(pMemory);
+		std::abort();
+#endif
+	}
+
+	VKAPI_ATTR void VKAPI_CALL mem_free(void* pUserData, void* pMemory)
+	{
+#ifdef _MSC_VER
+		_aligned_free(pMemory);
+#elif _WIN32
+		__mingw_aligned_free(pMemory);
+#else
+		std::abort();
 #endif
 	}
 
@@ -43,19 +55,42 @@ namespace vk
 		result.device_local = VK_MAX_MEMORY_TYPES;
 		result.host_visible_coherent = VK_MAX_MEMORY_TYPES;
 
+		bool host_visible_cached = false;
+		VkDeviceSize  host_visible_vram_size = 0;
+		VkDeviceSize  device_local_vram_size = 0;
+
 		for (u32 i = 0; i < memory_properties.memoryTypeCount; i++)
 		{
+			VkMemoryHeap &heap = memory_properties.memoryHeaps[memory_properties.memoryTypes[i].heapIndex];
+			
 			bool is_device_local = !!(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			if (is_device_local)
-				result.device_local = i;
+			{
+				if (device_local_vram_size < heap.size)
+				{
+					result.device_local = i;
+					device_local_vram_size = heap.size;
+				}
+			}
+
 			bool is_host_visible = !!(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			bool is_host_coherent = !!(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			bool is_cached = !!(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+			
 			if (is_host_coherent && is_host_visible)
-				result.host_visible_coherent = i;
+			{
+				if ((is_cached && !host_visible_cached) ||
+					(host_visible_vram_size < heap.size))
+				{
+					result.host_visible_coherent = i;
+					host_visible_vram_size = heap.size;
+					host_visible_cached = is_cached;
+				}
+			}
 		}
 
-		if (result.device_local == VK_MAX_MEMORY_TYPES) throw EXCEPTION("GPU doesn't support device local memory");
-		if (result.host_visible_coherent == VK_MAX_MEMORY_TYPES) throw EXCEPTION("GPU doesn't support host coherent device local memory");
+		if (result.device_local == VK_MAX_MEMORY_TYPES) fmt::throw_exception("GPU doesn't support device local memory" HERE);
+		if (result.host_visible_coherent == VK_MAX_MEMORY_TYPES) fmt::throw_exception("GPU doesn't support host coherent device local memory" HERE);
 		return result;
 	}
 
@@ -79,7 +114,7 @@ namespace vk
 		case CELL_GCM_TEXTURE_DEPTH16_FLOAT: return VK_FORMAT_R16_SFLOAT;
 		case CELL_GCM_TEXTURE_X16: return VK_FORMAT_R16_UNORM;
 		case CELL_GCM_TEXTURE_Y16_X16: return VK_FORMAT_R16G16_UNORM;
-		case CELL_GCM_TEXTURE_Y16_X16_FLOAT: return VK_FORMAT_R16G16_UNORM;
+		case CELL_GCM_TEXTURE_Y16_X16_FLOAT: return VK_FORMAT_R16G16_SFLOAT;
 		case CELL_GCM_TEXTURE_R5G5B5A1: return VK_FORMAT_R5G5B5A1_UNORM_PACK16;
 		case CELL_GCM_TEXTURE_W16_Z16_Y16_X16_FLOAT: return VK_FORMAT_R16G16B16A16_SFLOAT;
 		case CELL_GCM_TEXTURE_W32_Z32_Y32_X32_FLOAT: return VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -93,7 +128,7 @@ namespace vk
 		case ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN) & CELL_GCM_TEXTURE_COMPRESSED_B8R8_G8R8: return VK_FORMAT_R8G8_UNORM; // Not right
 		case ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN) & CELL_GCM_TEXTURE_COMPRESSED_R8B8_R8G8: return VK_FORMAT_R8G8_UNORM; // Not right
 		}
-		throw EXCEPTION("Invalid or unsupported sampler format for texture format (0x%x)", format);
+		fmt::throw_exception("Invalid or unsupported sampler format for texture format (0x%x)" HERE, format);
 	}
 
 	VkAllocationCallbacks default_callbacks()
@@ -218,6 +253,29 @@ namespace vk
 		}
 
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	}
+
+	void change_image_layout(VkCommandBuffer cmd, vk::image *image, VkImageLayout new_layout, VkImageSubresourceRange range)
+	{
+		if (image->current_layout == new_layout) return;
+
+		change_image_layout(cmd, image->value, image->current_layout, new_layout, range);
+		image->current_layout = new_layout;
+	}
+
+	void enter_uninterruptible()
+	{
+		g_cb_no_interrupt_flag = true;
+	}
+
+	void leave_uninterruptible()
+	{
+		g_cb_no_interrupt_flag = false;
+	}
+
+	bool is_uninterruptible()
+	{
+		return g_cb_no_interrupt_flag;
 	}
 
 	VKAPI_ATTR VkBool32 VKAPI_CALL dbgFunc(VkFlags msgFlags, VkDebugReportObjectTypeEXT objType,

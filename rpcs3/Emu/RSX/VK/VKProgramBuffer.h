@@ -11,6 +11,9 @@ namespace vk
 		VkPipelineInputAssemblyStateCreateInfo ia;
 		VkPipelineDepthStencilStateCreateInfo ds;
 		VkPipelineColorBlendAttachmentState att_state[4];
+		VkPipelineColorBlendStateCreateInfo cs;
+		VkPipelineRasterizationStateCreateInfo rs;
+		
 		VkRenderPass render_pass;
 		int num_targets;
 
@@ -22,6 +25,13 @@ namespace vk
 				return false;
 			if (memcmp(&att_state[0], &other.att_state[0], sizeof(VkPipelineColorBlendAttachmentState)))
 				return false;
+			if (memcmp(&cs, &other.cs, sizeof(VkPipelineColorBlendStateCreateInfo)))
+				return false;
+			if (memcmp(&rs, &other.rs, sizeof(VkPipelineRasterizationStateCreateInfo)))
+				return false;
+			if (render_pass != other.render_pass)
+				return false;
+
 			return num_targets == other.num_targets;
 		}
 	};
@@ -48,6 +58,8 @@ namespace std
 			size_t seed = hash<unsigned>()(pipelineProperties.num_targets);
 			seed ^= hash_struct(pipelineProperties.ia);
 			seed ^= hash_struct(pipelineProperties.ds);
+			seed ^= hash_struct(pipelineProperties.rs);
+			seed ^= hash_struct(pipelineProperties.cs);
 			seed ^= hash_struct(pipelineProperties.att_state[0]);
 			return hash<size_t>()(seed);
 		}
@@ -62,14 +74,14 @@ struct VKTraits
 	using pipeline_properties = vk::pipeline_props;
 
 	static
-	void recompile_fragment_program(const RSXFragmentProgram &RSXFP, fragment_program_type& fragmentProgramData, size_t ID)
+	void recompile_fragment_program(const RSXFragmentProgram &RSXFP, fragment_program_type& fragmentProgramData, size_t /*ID*/)
 	{
 		fragmentProgramData.Decompile(RSXFP);
 		fragmentProgramData.Compile();
 	}
 
 	static
-	void recompile_vertex_program(const RSXVertexProgram &RSXVP, vertex_program_type& vertexProgramData, size_t ID)
+	void recompile_vertex_program(const RSXVertexProgram &RSXVP, vertex_program_type& vertexProgramData, size_t /*ID*/)
 	{
 		vertexProgramData.Decompile(RSXVP);
 		vertexProgramData.Compile();
@@ -113,27 +125,13 @@ struct VKTraits
 		ms.pSampleMask = NULL;
 		ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-		VkPipelineColorBlendStateCreateInfo cb = {};
-		cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		cb.attachmentCount = 1;
-		cb.pAttachments = pipelineProperties.att_state;
-
-		VkPipelineRasterizationStateCreateInfo rs = {};
-		rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		rs.polygonMode = VK_POLYGON_MODE_FILL;
-		rs.cullMode = VK_CULL_MODE_NONE;
-		rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rs.depthClampEnable = VK_FALSE;
-		rs.rasterizerDiscardEnable = VK_FALSE;
-		rs.depthBiasEnable = VK_FALSE;
-
 		VkPipeline pipeline;
 		VkGraphicsPipelineCreateInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		info.pVertexInputState = &vi;
 		info.pInputAssemblyState = &pipelineProperties.ia;
-		info.pRasterizationState = &rs;
-		info.pColorBlendState = &cb;
+		info.pRasterizationState = &pipelineProperties.rs;
+		info.pColorBlendState = &pipelineProperties.cs;
 		info.pMultisampleState = &ms;
 		info.pViewportState = &vp;
 		info.pDepthStencilState = &pipelineProperties.ds;
@@ -155,4 +153,11 @@ struct VKTraits
 
 class VKProgramBuffer : public program_state_cache<VKTraits>
 {
+public:
+	void clear()
+	{
+		program_state_cache<VKTraits>::clear();
+		m_vertex_shader_cache.clear();
+		m_fragment_shader_cache.clear();
+	}
 };

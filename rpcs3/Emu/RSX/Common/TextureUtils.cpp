@@ -12,7 +12,7 @@ namespace
 	template <typename T>
 	gsl::span<T> as_span_workaround(gsl::span<gsl::byte> unformated_span)
 	{
-		return{ (T*)unformated_span.data(), gsl::narrow<int>(unformated_span.size_bytes() / sizeof(T)) };
+		return{ (T*)unformated_span.data(), ::narrow<int>(unformated_span.size_bytes() / sizeof(T)) };
 	}
 
 	// TODO: Make this function part of GSL
@@ -21,7 +21,7 @@ namespace
 	constexpr void copy(gsl::span<T1> dst, gsl::span<T2> src)
 	{
 		static_assert(std::is_convertible<T1, T2>::value, "Cannot convert source and destination span type.");
-		EXPECTS(dst.size() == src.size());
+		verify(HERE), (dst.size() == src.size());
 		std::copy(src.begin(), src.end(), dst.begin());
 	}
 
@@ -46,7 +46,7 @@ struct copy_unmodified_block_swizzled
 		for (int d = 0; d < depth; ++d)
 		{
 			rsx::convert_linear_swizzle<U>((void*)src.subspan(d * width_in_block * row_count).data(), temp_swizzled.get(), width_in_block, row_count, true);
-			gsl::span<const U> swizzled_src{ temp_swizzled.get(), gsl::narrow<int>(width_in_block * row_count) };
+			gsl::span<const U> swizzled_src{ temp_swizzled.get(), ::narrow<int>(width_in_block * row_count) };
 			for (int row = 0; row < row_count; ++row)
 				copy(dst.subspan((row + d * row_count) * dst_pitch_in_block, width_in_block), swizzled_src.subspan(row * width_in_block, width_in_block));
 		}
@@ -120,7 +120,8 @@ u32 get_row_pitch_in_block(u16 width_in_block, size_t multiple_constraints_in_by
  * Since rsx ignore unused dimensionnality some app set them to 0.
  * Use 1 value instead to be more general.
  */
-std::tuple<u16, u16, u8> get_height_depth_layer(const rsx::texture &tex)
+template<typename RsxTextureType>
+std::tuple<u16, u16, u8> get_height_depth_layer(const RsxTextureType &tex)
 {
 	switch (tex.get_extended_texture_dimension())
 	{
@@ -129,11 +130,12 @@ std::tuple<u16, u16, u8> get_height_depth_layer(const rsx::texture &tex)
 	case rsx::texture_dimension_extended::texture_dimension_cubemap: return std::make_tuple(tex.height(), 1, 6);
 	case rsx::texture_dimension_extended::texture_dimension_3d: return std::make_tuple(tex.height(), tex.depth(), 1);
 	}
-	throw EXCEPTION("Unsupported texture dimension");
+	fmt::throw_exception("Unsupported texture dimension" HERE);
 }
 }
 
-std::vector<rsx_subresource_layout> get_subresources_layout(const rsx::texture &texture)
+template<typename RsxTextureType>
+std::vector<rsx_subresource_layout> get_subresources_layout_impl(const RsxTextureType &texture)
 {
 	u16 w = texture.width();
 	u16 h;
@@ -172,16 +174,29 @@ std::vector<rsx_subresource_layout> get_subresources_layout(const rsx::texture &
 	case CELL_GCM_TEXTURE_A8R8G8B8:
 	case CELL_GCM_TEXTURE_Y16_X16:
 	case CELL_GCM_TEXTURE_Y16_X16_FLOAT:
+	case CELL_GCM_TEXTURE_X32_FLOAT:
 		return get_subresources_layout_impl<1, u32>(pixels, w, h, depth, layer, texture.get_exact_mipmap_count(), texture.pitch(), !is_swizzled);
 	case CELL_GCM_TEXTURE_W16_Z16_Y16_X16_FLOAT:
 		return get_subresources_layout_impl<1, u64>(pixels, w, h, depth, layer, texture.get_exact_mipmap_count(), texture.pitch(), !is_swizzled);
+	case CELL_GCM_TEXTURE_W32_Z32_Y32_X32_FLOAT:
+		return get_subresources_layout_impl<1, u128>(pixels, w, h, depth, layer, texture.get_exact_mipmap_count(), texture.pitch(), !is_swizzled);
 	case CELL_GCM_TEXTURE_COMPRESSED_DXT1:
 		return get_subresources_layout_impl<4, u64>(pixels, w, h, depth, layer, texture.get_exact_mipmap_count(), texture.pitch(), !is_swizzled);
 	case CELL_GCM_TEXTURE_COMPRESSED_DXT23:
 	case CELL_GCM_TEXTURE_COMPRESSED_DXT45:
 		return get_subresources_layout_impl<4, u128>(pixels, w, h, depth, layer, texture.get_exact_mipmap_count(), texture.pitch(), !is_swizzled);
 	}
-	throw EXCEPTION("Wrong format 0x%x", format);
+	fmt::throw_exception("Wrong format 0x%x" HERE, format);
+}
+
+std::vector<rsx_subresource_layout> get_subresources_layout(const rsx::fragment_texture &texture)
+{
+	return get_subresources_layout_impl(texture);
+}
+
+std::vector<rsx_subresource_layout> get_subresources_layout(const rsx::vertex_texture &texture)
+{
+	return get_subresources_layout_impl(texture);
 }
 
 void upload_texture_subresource(gsl::span<gsl::byte> dst_buffer, const rsx_subresource_layout &src_layout, int format, bool is_swizzled, size_t dst_row_pitch_multiple_of)
@@ -189,6 +204,12 @@ void upload_texture_subresource(gsl::span<gsl::byte> dst_buffer, const rsx_subre
 	u16 w = src_layout.width_in_block;
 	u16 h = src_layout.height_in_block;
 	u16 depth = src_layout.depth;
+	u32 pitch = src_layout.pitch_in_bytes;
+
+	// Ignore when texture width > pitch
+	if (w > pitch)
+		return;
+		
 	switch (format)
 	{
 	case CELL_GCM_TEXTURE_B8:
@@ -236,11 +257,16 @@ void upload_texture_subresource(gsl::span<gsl::byte> dst_buffer, const rsx_subre
 
 	case CELL_GCM_TEXTURE_Y16_X16:
 	case CELL_GCM_TEXTURE_Y16_X16_FLOAT:
+	case CELL_GCM_TEXTURE_X32_FLOAT:
 		copy_unmodified_block::copy_mipmap_level(as_span_workaround<u32>(dst_buffer), gsl::as_span<const be_t<u32>>(src_layout.data), w, h, depth, get_row_pitch_in_block<u32>(w, dst_row_pitch_multiple_of), src_layout.pitch_in_bytes);
 		break;
 
 	case CELL_GCM_TEXTURE_W16_Z16_Y16_X16_FLOAT:
 		copy_unmodified_block::copy_mipmap_level(as_span_workaround<u64>(dst_buffer), gsl::as_span<const be_t<u64>>(src_layout.data), w, h, depth, get_row_pitch_in_block<u64>(w, dst_row_pitch_multiple_of), src_layout.pitch_in_bytes);
+		break;
+
+	case CELL_GCM_TEXTURE_W32_Z32_Y32_X32_FLOAT:
+		copy_unmodified_block::copy_mipmap_level(as_span_workaround<u128>(dst_buffer), gsl::as_span<const be_t<u128>>(src_layout.data), w, h, depth, get_row_pitch_in_block<u128>(w, dst_row_pitch_multiple_of), src_layout.pitch_in_bytes);
 		break;
 
 	case CELL_GCM_TEXTURE_COMPRESSED_DXT1:
@@ -253,7 +279,7 @@ void upload_texture_subresource(gsl::span<gsl::byte> dst_buffer, const rsx_subre
 		break;
 
 	default:
-		throw EXCEPTION("Wrong format 0x%x", format);
+		fmt::throw_exception("Wrong format 0x%x" HERE, format);
 	}
 }
 
@@ -339,36 +365,76 @@ u8 get_format_block_size_in_texel(int format)
 	}
 }
 
-
-size_t get_placed_texture_storage_size(const rsx::texture &texture, size_t rowPitchAlignement, size_t mipmapAlignment)
+u8 get_format_block_size_in_bytes(rsx::surface_color_format format)
 {
-	size_t w = texture.width(), h = texture.height(), d = std::max<u16>(texture.depth(), 1);
+	switch (format)
+	{
+	case rsx::surface_color_format::b8:
+		return 1;
+	case rsx::surface_color_format::g8b8:
+	case rsx::surface_color_format::r5g6b5:
+	case rsx::surface_color_format::x1r5g5b5_o1r5g5b5:
+	case rsx::surface_color_format::x1r5g5b5_z1r5g5b5:
+		return 2;
+	case rsx::surface_color_format::a8b8g8r8:
+	case rsx::surface_color_format::a8r8g8b8:
+	case rsx::surface_color_format::x8b8g8r8_o8b8g8r8:
+	case rsx::surface_color_format::x8b8g8r8_z8b8g8r8:
+	case rsx::surface_color_format::x8r8g8b8_o8r8g8b8:
+	case rsx::surface_color_format::x8r8g8b8_z8r8g8b8:
+	case rsx::surface_color_format::x32:
+		return 4;
+	case rsx::surface_color_format::w16z16y16x16:
+		return 8;
+	case rsx::surface_color_format::w32z32y32x32:
+		return 16;
+	default:
+		fmt::throw_exception("Invalid color format 0x%x" HERE, (u32)format);
+	}
+}
 
-	int format = texture.format() & ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN);
-	size_t blockEdge = get_format_block_size_in_texel(format);
-	size_t blockSizeInByte = get_format_block_size_in_bytes(format);
+static size_t get_placed_texture_storage_size(u16 width, u16 height, u32 depth, u8 format, u16 mipmap, bool cubemap, size_t row_pitch_alignement, size_t mipmap_alignment)
+{
+	size_t w = width;
+	size_t h = std::max<u16>(height, 1);
+	size_t d = std::max<u16>(depth, 1);
 
-	size_t heightInBlocks = (h + blockEdge - 1) / blockEdge;
-	size_t widthInBlocks = (w + blockEdge - 1) / blockEdge;
+	format &= ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN);
+	size_t block_edge = get_format_block_size_in_texel(format);
+	size_t block_size_in_byte = get_format_block_size_in_bytes(format);
+
+	size_t height_in_blocks = (h + block_edge - 1) / block_edge;
+	size_t width_in_blocks = (w + block_edge - 1) / block_edge;
 
 	size_t result = 0;
-	for (unsigned mipmap = 0; mipmap < texture.mipmap(); ++mipmap)
+	for (u16 i = 0; i < mipmap; ++i)
 	{
-		size_t rowPitch = align(blockSizeInByte * widthInBlocks, rowPitchAlignement);
-		result += align(rowPitch * heightInBlocks * d, mipmapAlignment);
-		heightInBlocks = std::max<size_t>(heightInBlocks / 2, 1);
-		widthInBlocks = std::max<size_t>(widthInBlocks / 2, 1);
+		size_t rowPitch = align(block_size_in_byte * width_in_blocks, row_pitch_alignement);
+		result += align(rowPitch * height_in_blocks * d, mipmap_alignment);
+		height_in_blocks = std::max<size_t>(height_in_blocks / 2, 1);
+		width_in_blocks = std::max<size_t>(width_in_blocks / 2, 1);
 	}
 
-	return result * (texture.cubemap() ? 6 : 1);
+	return result * (cubemap ? 6 : 1);
+}
+
+size_t get_placed_texture_storage_size(const rsx::fragment_texture &texture, size_t row_pitch_alignement, size_t mipmap_alignment)
+{
+	return get_placed_texture_storage_size(texture.width(), texture.height(), texture.depth(), texture.format(), texture.mipmap(), texture.cubemap(),
+		row_pitch_alignement, mipmap_alignment);
+}
+
+size_t get_placed_texture_storage_size(const rsx::vertex_texture &texture, size_t row_pitch_alignement, size_t mipmap_alignment)
+{
+	return get_placed_texture_storage_size(texture.width(), texture.height(), texture.depth(), texture.format(), texture.mipmap(), texture.cubemap(),
+		row_pitch_alignement, mipmap_alignment);
 }
 
 
-size_t get_texture_size(const rsx::texture &texture)
+static size_t get_texture_size(u32 w, u32 h, u8 format)
 {
-	size_t w = texture.width(), h = texture.height();
+	format &= ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN);
 
-	int format = texture.format() & ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN);
 	// TODO: Take mipmaps into account
 	switch (format)
 	{
@@ -433,4 +499,14 @@ size_t get_texture_size(const rsx::texture &texture)
 		LOG_ERROR(RSX, "Unimplemented texture size for texture format: 0x%x", format);
 		return 0;
 	}
+}
+
+size_t get_texture_size(const rsx::fragment_texture &texture)
+{
+	return get_texture_size(texture.width(), texture.height(), texture.format());
+}
+
+size_t get_texture_size(const rsx::vertex_texture &texture)
+{
+	return get_texture_size(texture.width(), texture.height(), texture.format());
 }

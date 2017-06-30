@@ -29,27 +29,15 @@ std::string VKFragmentDecompilerThread::compareFunction(COMPARE f, const std::st
 
 void VKFragmentDecompilerThread::insertHeader(std::stringstream & OS)
 {
-	OS << "#version 420" << std::endl;
-	OS << "#extension GL_ARB_separate_shader_objects: enable" << std::endl << std::endl;
-
-	OS << "layout(std140, set=0, binding = 0) uniform ScaleOffsetBuffer" << std::endl;
-	OS << "{" << std::endl;
-	OS << "	mat4 scaleOffsetMat;" << std::endl;
-	OS << "	float fog_param0;" << std::endl;
-	OS << "	float fog_param1;" << std::endl;
-	OS << "};" << std::endl << std::endl;
-
-	vk::glsl::program_input in;
-	in.location = 0;
-	in.domain = vk::glsl::glsl_fragment_program;
-	in.name = "ScaleOffsetBuffer";
-	in.type = vk::glsl::input_type_uniform_buffer;
-
-	inputs.push_back(in);
+	OS << "#version 420\n";
+	OS << "#extension GL_ARB_separate_shader_objects: enable\n\n";
 }
 
 void VKFragmentDecompilerThread::insertIntputs(std::stringstream & OS)
 {
+	//It is possible for the two_sided_enabled flag to be set without actual 2-sided outputs
+	bool two_sided_enabled = m_prog.front_back_color_enabled && (m_prog.back_color_diffuse_output || m_prog.back_color_specular_output);
+
 	for (const ParamType& PT : m_parr.params[PF_PARAM_IN])
 	{
 		for (const ParamItem& PI : PT.items)
@@ -58,12 +46,37 @@ void VKFragmentDecompilerThread::insertIntputs(std::stringstream & OS)
 			if (PI.name == "ssa") continue;
 
 			const vk::varying_register_t &reg = vk::get_varying_register(PI.name);
-			
 			std::string var_name = PI.name;
+
+			if (two_sided_enabled)
+			{
+				if (m_prog.back_color_diffuse_output && var_name == "diff_color")
+					var_name = "back_diff_color";
+
+				if (m_prog.back_color_specular_output && var_name == "spec_color")
+					var_name = "back_spec_color";
+			}
+
 			if (var_name == "fogc")
 				var_name = "fog_c";
 
-			OS << "layout(location=" << reg.reg_location << ") in " << PT.type << " " << var_name << ";" << std::endl;
+			OS << "layout(location=" << reg.reg_location << ") in " << PT.type << " " << var_name << ";\n";
+		}
+	}
+
+	if (two_sided_enabled)
+	{
+		//Only include the front counterparts if the default output is for back only and exists.
+		if (m_prog.front_color_diffuse_output && m_prog.back_color_diffuse_output)
+		{
+			const vk::varying_register_t &reg = vk::get_varying_register("front_diff_color");
+			OS << "layout(location=" << reg.reg_location << ") in vec4 front_diff_color;\n";
+		}
+
+		if (m_prog.front_color_specular_output && m_prog.back_color_specular_output)
+		{
+			const vk::varying_register_t &reg = vk::get_varying_register("front_spec_color");
+			OS << "layout(location=" << reg.reg_location << ") in vec4 front_spec_color;\n";
 		}
 	}
 }
@@ -78,16 +91,18 @@ void VKFragmentDecompilerThread::insertOutputs(std::stringstream & OS)
 		{ "ocol3", m_ctrl & CELL_GCM_SHADER_CONTROL_32_BITS_EXPORTS ? "r4" : "h8" },
 	};
 
+	//NOTE: We do not skip outputs, the only possible combinations are a(0), b(0), ab(0,1), abc(0,1,2), abcd(0,1,2,3)
+	u8 output_index = 0;
 	for (int i = 0; i < sizeof(table) / sizeof(*table); ++i)
 	{
 		if (m_parr.HasParam(PF_PARAM_NONE, "vec4", table[i].second))
-			OS << "layout(location=" << i << ") " << "out vec4 " << table[i].first << ";" << std::endl;
+			OS << "layout(location=" << std::to_string(output_index++) << ") " << "out vec4 " << table[i].first << ";\n";
 	}
 }
 
 void VKFragmentDecompilerThread::insertConstants(std::stringstream & OS)
 {
-	int location = 2;
+	int location = 0;
 
 	for (const ParamType& PT : m_parr.params[PF_PARAM_UNIFORM])
 	{
@@ -102,8 +117,22 @@ void VKFragmentDecompilerThread::insertConstants(std::stringstream & OS)
 			std::string samplerType = PT.type;
 			int index = atoi(&PI.name.data()[3]);
 
-			if (m_prog.unnormalized_coords & (1 << index))
+			const auto mask = (1 << index);
+
+			if (m_prog.unnormalized_coords & mask)
+			{
 				samplerType = "sampler2DRect";
+			}
+			else if (m_prog.shadow_textures & mask)
+			{
+				if (m_shadow_sampled_textures & mask)
+				{
+					if (m_2d_sampled_textures & mask)
+						LOG_ERROR(RSX, "Texture unit %d is sampled as both a shadow texture and a depth texture", index);
+					else
+						samplerType = "sampler2DShadow";
+				}
+			}
 
 			vk::glsl::program_input in;
 			in.location = location;
@@ -113,12 +142,12 @@ void VKFragmentDecompilerThread::insertConstants(std::stringstream & OS)
 
 			inputs.push_back(in);
 
-			OS << "layout(set=0, binding=" << 19 + location++ << ") uniform " << samplerType << " " << PI.name << ";" << std::endl;
+			OS << "layout(set=0, binding=" << 19 + location++ << ") uniform " << samplerType << " " << PI.name << ";\n";
 		}
 	}
 
-	OS << "layout(std140, set = 0, binding = 2) uniform FragmentConstantsBuffer" << std::endl;
-	OS << "{" << std::endl;
+	OS << "layout(std140, set = 0, binding = 2) uniform FragmentConstantsBuffer\n";
+	OS << "{\n";
 
 	for (const ParamType& PT : m_parr.params[PF_PARAM_UNIFORM])
 	{
@@ -129,12 +158,15 @@ void VKFragmentDecompilerThread::insertConstants(std::stringstream & OS)
 			continue;
 
 		for (const ParamItem& PI : PT.items)
-			OS << "	" << PT.type << " " << PI.name << ";" << std::endl;
+			OS << "	" << PT.type << " " << PI.name << ";\n";
 	}
 
-	// A dummy value otherwise it's invalid to create an empty uniform buffer
-	OS << "	vec4 void_value;" << std::endl;
-	OS << "};" << std::endl;
+	OS << "	float fog_param0;\n";
+	OS << "	float fog_param1;\n";
+	OS << "	uint alpha_test;\n";
+	OS << "	float alpha_ref;\n";
+	OS << "	vec4 texture_parameters[16];\n";
+	OS << "};\n";
 
 	vk::glsl::program_input in;
 	in.location = 1;
@@ -155,55 +187,145 @@ namespace vk
 		{
 		case rsx::fog_mode::linear:
 			OS << "	vec4 fogc = vec4(fog_param1 * fog_c.x + (fog_param0 - 1.), fog_param1 * fog_c.x + (fog_param0 - 1.), 0., 0.);\n";
-			return;
+			break;
 		case rsx::fog_mode::exponential:
 			OS << "	vec4 fogc = vec4(11.084 * (fog_param1 * fog_c.x + fog_param0 - 1.5), exp(11.084 * (fog_param1 * fog_c.x + fog_param0 - 1.5)), 0., 0.);\n";
-			return;
+			break;
 		case rsx::fog_mode::exponential2:
-			OS << "	vec4 fogc = vec4(4.709 * (fog_param1 * fog_c.x + fog_param0 - 1.5), exp(-pow(4.709 * (fog_param1 * fog_c.x + fog_param0 - 1.5)), 2.), 0., 0.);\n";
-			return;
+			OS << "	vec4 fogc = vec4(4.709 * (fog_param1 * fog_c.x + fog_param0 - 1.5), exp(-pow(4.709 * (fog_param1 * fog_c.x + fog_param0 - 1.5), 2.)), 0., 0.);\n";
+			break;
 		case rsx::fog_mode::linear_abs:
 			OS << "	vec4 fogc = vec4(fog_param1 * abs(fog_c.x) + (fog_param0 - 1.), fog_param1 * abs(fog_c.x) + (fog_param0 - 1.), 0., 0.);\n";
-			return;
+			break;
 		case rsx::fog_mode::exponential_abs:
 			OS << "	vec4 fogc = vec4(11.084 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5), exp(11.084 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5)), 0., 0.);\n";
-			return;
+			break;
 		case rsx::fog_mode::exponential2_abs:
-			OS << "	vec4 fogc = vec4(4.709 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5), exp(-pow(4.709 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5)), 2.), 0., 0.);\n";
+			OS << "	vec4 fogc = vec4(4.709 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5), exp(-pow(4.709 * (fog_param1 * abs(fog_c.x) + fog_param0 - 1.5), 2.)), 0., 0.);\n";
+			break;
+		default:
+			OS << "	vec4 fogc = vec4(0.);\n";
 			return;
 		}
+
+		OS << "	fogc.y = clamp(fogc.y, 0., 1.);\n";
+	}
+
+	std::string insert_texture_fetch(const RSXFragmentProgram& prog, int index)
+	{
+		std::string tex_name = "tex" + std::to_string(index);
+		std::string coord_name = "tc" + std::to_string(index);
+
+		switch (prog.get_texture_dimension(index))
+		{
+		case rsx::texture_dimension_extended::texture_dimension_1d: return "texture(" + tex_name + ", " + coord_name + ".x)";
+		case rsx::texture_dimension_extended::texture_dimension_2d: return "texture(" + tex_name + ", " + coord_name + ".xy)";
+		case rsx::texture_dimension_extended::texture_dimension_3d:
+		case rsx::texture_dimension_extended::texture_dimension_cubemap: return "texture(" + tex_name + ", " + coord_name + ".xyz)";
+		}
+
+		fmt::throw_exception("Invalid texture dimension %d" HERE, (u32)prog.get_texture_dimension(index));
 	}
 }
 
 void VKFragmentDecompilerThread::insertMainStart(std::stringstream & OS)
 {
-	vk::insert_glsl_legacy_function(OS);
+	vk::insert_glsl_legacy_function(OS, vk::glsl::program_domain::glsl_fragment_program);
 
-	OS << "void main ()" << std::endl;
-	OS << "{" << std::endl;
+	const std::set<std::string> output_values =
+	{
+		"r0", "r1", "r2", "r3", "r4",
+		"h0", "h2", "h4", "h6", "h8"
+	};
+
+	std::string parameters = "";
+	for (auto &reg_name : output_values)
+	{
+		if (m_parr.HasParam(PF_PARAM_NONE, "vec4", reg_name))
+		{
+			if (parameters.length())
+				parameters += ", ";
+
+			parameters += "inout vec4 " + reg_name;
+		}
+	}
+
+	OS << "void fs_main(" << parameters << ")\n";
+	OS << "{\n";
 
 	for (const ParamType& PT : m_parr.params[PF_PARAM_NONE])
 	{
 		for (const ParamItem& PI : PT.items)
 		{
+			if (output_values.find(PI.name) != output_values.end())
+				continue;
+
 			OS << "	" << PT.type << " " << PI.name;
 			if (!PI.value.empty())
 				OS << " = " << PI.value;
-			OS << ";" << std::endl;
+
+			OS << ";\n";
 		}
 	}
 
 	OS << "	vec4 ssa = gl_FrontFacing ? vec4(1.) : vec4(-1.);\n";
+	OS << "	vec4 wpos = gl_FragCoord;\n";
 
-	// search if there is fogc in inputs
+	//Flip wpos in Y
+	//We could optionally export wpos from the VS, but this is so much easier
+	if (m_prog.origin_mode == rsx::window_origin::bottom)
+		OS << "	wpos.y = " << std::to_string(m_prog.height) << " - wpos.y;\n";
+
+	bool two_sided_enabled = m_prog.front_back_color_enabled && (m_prog.back_color_diffuse_output || m_prog.back_color_specular_output);
+
+	//Some registers require redirection
 	for (const ParamType& PT : m_parr.params[PF_PARAM_IN])
 	{
 		for (const ParamItem& PI : PT.items)
 		{
+			if (two_sided_enabled)
+			{
+				if (PI.name == "spec_color")
+				{
+					//Only redirect/rename variables if the back_color exists
+					if (m_prog.back_color_specular_output)
+					{
+						if (m_prog.back_color_specular_output && m_prog.front_color_specular_output)
+						{
+							OS << "	vec4 spec_color = gl_FrontFacing ? front_spec_color : back_spec_color;\n";
+						}
+						else
+						{
+							OS << "	vec4 spec_color = back_spec_color;\n";
+						}
+					}
+
+					continue;
+				}
+
+				else if (PI.name == "diff_color")
+				{
+					//Only redirect/rename variables if the back_color exists
+					if (m_prog.back_color_diffuse_output)
+					{
+						if (m_prog.back_color_diffuse_output && m_prog.front_color_diffuse_output)
+						{
+							OS << "	vec4 diff_color = gl_FrontFacing ? front_diff_color : back_diff_color;\n";
+						}
+						else
+						{
+							OS << "	vec4 diff_color = back_diff_color;\n";
+						}
+					}
+
+					continue;
+				}
+			}
+
 			if (PI.name == "fogc")
 			{
 				vk::insert_fog_declaration(OS, m_prog.fog_equation);
-				return;
+				continue;
 			}
 		}
 	}
@@ -219,26 +341,102 @@ void VKFragmentDecompilerThread::insertMainEnd(std::stringstream & OS)
 		{ "ocol3", m_ctrl & CELL_GCM_SHADER_CONTROL_32_BITS_EXPORTS ? "r4" : "h8" },
 	};
 
+	const std::set<std::string> output_values =
+	{
+		"r0", "r1", "r2", "r3", "r4",
+		"h0", "h2", "h4", "h6", "h8"
+	};
+
+	std::string first_output_name = "";
+	std::string color_output_block = "";
+
 	for (int i = 0; i < sizeof(table) / sizeof(*table); ++i)
 	{
 		if (m_parr.HasParam(PF_PARAM_NONE, "vec4", table[i].second))
-			OS << "	" << table[i].first << " = " << table[i].second << ";" << std::endl;
+		{
+			color_output_block += "	" + table[i].first + " = " + table[i].second + ";\n";
+			if (first_output_name.empty()) first_output_name = table[i].second;
+		}
 	}
+
+	if (!first_output_name.empty())
+	{
+		auto make_comparison_test = [](rsx::comparison_function compare_func, const std::string &test, const std::string &a, const std::string &b) -> std::string
+		{
+			std::string compare;
+			switch (compare_func)
+			{
+			case rsx::comparison_function::equal:            compare = " == "; break;
+			case rsx::comparison_function::not_equal:        compare = " != "; break;
+			case rsx::comparison_function::less_or_equal:    compare = " <= "; break;
+			case rsx::comparison_function::less:             compare = " < ";  break;
+			case rsx::comparison_function::greater:          compare = " > ";  break;
+			case rsx::comparison_function::greater_or_equal: compare = " >= "; break;
+			default:
+				return "";
+			}
+
+			return "	if (" + test + "!(" + a + compare + b + ")) discard;\n";
+		};
+
+		for (u8 index = 0; index < 16; ++index)
+		{
+			if (m_prog.textures_alpha_kill[index])
+			{
+				const std::string texture_name = "tex" + std::to_string(index);
+				if (m_parr.HasParamTypeless(PF_PARAM_UNIFORM, texture_name))
+				{
+					std::string fetch_texture = vk::insert_texture_fetch(m_prog, index) + ".a";
+					OS << make_comparison_test((rsx::comparison_function)m_prog.textures_zfunc[index], "", "0", fetch_texture);
+				}
+			}
+		}
+
+		OS << make_comparison_test(m_prog.alpha_func, "bool(alpha_test) && ", first_output_name + ".a", "alpha_ref");
+	}
+
+	OS << "}\n\n";
+
+	OS << "void main()\n";
+	OS << "{\n";
+
+	std::string parameters = "";
+	for (auto &reg_name : output_values)
+	{
+		if (m_parr.HasParam(PF_PARAM_NONE, "vec4", reg_name))
+		{
+			if (parameters.length())
+				parameters += ", ";
+
+			parameters += reg_name;
+			OS << "	vec4 " << reg_name << " = vec4(0.);\n";
+		}
+	}
+
+	OS << "\n" << "	fs_main(" + parameters + ");\n\n";
+
+	//Append the color output assignments
+	OS << color_output_block;
 
 	if (m_ctrl & CELL_GCM_SHADER_CONTROL_DEPTH_EXPORT)
 	{
+		if (m_parr.HasParam(PF_PARAM_NONE, "vec4", "r1"))
 		{
 			/** Note: Naruto Shippuden : Ultimate Ninja Storm 2 sets CELL_GCM_SHADER_CONTROL_32_BITS_EXPORTS in a shader
 			* but it writes depth in r1.z and not h2.z.
 			* Maybe there's a different flag for depth ?
 			*/
-			//OS << ((m_ctrl & CELL_GCM_SHADER_CONTROL_32_BITS_EXPORTS) ? "\tgl_FragDepth = r1.z;\n" : "\tgl_FragDepth = h0.z;\n") << std::endl;
+			//OS << ((m_ctrl & CELL_GCM_SHADER_CONTROL_32_BITS_EXPORTS) ? "\tgl_FragDepth = r1.z;\n" : "\tgl_FragDepth = h0.z;\n") << "\n";
 			OS << "	gl_FragDepth = r1.z;\n";
+		}
+		else
+		{
+			//Input not declared. Leave commented to assist in debugging the shader
+			OS << "	//gl_FragDepth = r1.z;\n";
 		}
 	}
 
-
-	OS << "}" << std::endl;
+	OS << "}\n";
 }
 
 void VKFragmentDecompilerThread::Task()
@@ -266,8 +464,12 @@ void VKFragmentProgram::Decompile(const RSXFragmentProgram& prog)
 	{
 		for (const ParamItem& PI : PT.items)
 		{
-			if (PT.type == "sampler2D")
+			if (PT.type == "sampler1D" ||
+				PT.type == "sampler2D" ||
+				PT.type == "sampler3D" ||
+				PT.type == "samplerCube")
 				continue;
+
 			size_t offset = atoi(PI.name.c_str() + 2);
 			FragmentConstantOffsetCache.push_back(offset);
 		}
@@ -276,11 +478,12 @@ void VKFragmentProgram::Decompile(const RSXFragmentProgram& prog)
 
 void VKFragmentProgram::Compile()
 {
-	fs::file(fs::get_config_dir() + "FragmentProgram.spirv", fs::rewrite).write(shader);
+	fs::create_path(fs::get_config_dir() + "/shaderlog");
+	fs::file(fs::get_config_dir() + "shaderlog/FragmentProgram.spirv", fs::rewrite).write(shader);
 
 	std::vector<u32> spir_v;
 	if (!vk::compile_glsl_to_spv(shader, vk::glsl::glsl_fragment_program, spir_v))
-		throw EXCEPTION("Failed to compile fragment shader");
+		fmt::throw_exception("Failed to compile fragment shader" HERE);
 
 	//Create the object and compile
 	VkShaderModuleCreateInfo fs_info;
@@ -302,16 +505,9 @@ void VKFragmentProgram::Delete()
 
 	if (handle)
 	{
-		if (Emu.IsStopped())
-		{
-			LOG_WARNING(RSX, "VKFragmentProgram::Delete(): vkDestroyShaderModule(0x%X) avoided", handle);
-		}
-		else
-		{
-			VkDevice dev = (VkDevice)*vk::get_current_renderer();
-			vkDestroyShaderModule(dev, handle, NULL);
-			handle = nullptr;
-		}
+		VkDevice dev = (VkDevice)*vk::get_current_renderer();
+		vkDestroyShaderModule(dev, handle, NULL);
+		handle = nullptr;
 	}
 }
 

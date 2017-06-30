@@ -1,28 +1,49 @@
 ﻿#include "Log.h"
 #include "File.h"
 #include "StrFmt.h"
+#include "sema.h"
 
-#include <cstdarg>
+#include "rpcs3_version.h"
 #include <string>
+#include <unordered_map>
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <chrono>
+#endif
+
+static std::string empty_string()
+{
+	return {};
+}
 
 // Thread-specific log prefix provider
-thread_local std::string(*g_tls_log_prefix)() = nullptr;
+thread_local std::string(*g_tls_log_prefix)() = &empty_string;
 
-#ifndef _MSC_VER
-constexpr DECLARE(bijective<logs::level, const char*>::map);
-#endif
+template<>
+void fmt_class_string<logs::level>::format(std::string& out, u64 arg)
+{
+	format_enum(out, arg, [](auto lev)
+	{
+		switch (lev)
+		{
+		case logs::level::always: return "Nothing";
+		case logs::level::fatal: return "Fatal";
+		case logs::level::error: return "Error";
+		case logs::level::todo: return "TODO";
+		case logs::level::success: return "Success";
+		case logs::level::warning: return "Warning";
+		case logs::level::notice: return "Notice";
+		case logs::level::trace: return "Trace";
+		}
+
+		return unknown;
+	});
+}
 
 namespace logs
 {
-	struct listener
-	{
-		listener() = default;
-
-		virtual ~listener() = default;
-
-		virtual void log(const channel& ch, level sev, const std::string& text) = 0;
-	};
-
 	class file_writer
 	{
 		// Could be memory-mapped file
@@ -34,10 +55,7 @@ namespace logs
 		virtual ~file_writer() = default;
 
 		// Append raw data
-		void log(const std::string& text);
-
-		// Get current file size (may be used by secondary readers)
-		std::size_t size() const;
+		void log(const char* text, std::size_t size);
 	};
 
 	struct file_listener : public file_writer, public listener
@@ -46,35 +64,162 @@ namespace logs
 			: file_writer(name)
 			, listener()
 		{
+			const std::string& start = fmt::format("\xEF\xBB\xBF" "RPCS3 v%s\n", rpcs3::version.to_string());
+			file_writer::log(start.data(), start.size());
 		}
 
 		// Encode level, current thread name, channel name and write log message
-		virtual void log(const channel& ch, level sev, const std::string& text) override;
+		virtual void log(u64 stamp, const message& msg, const std::string& prefix, const std::string& text) override;
 	};
 
-	static file_listener& get_logger()
+	static file_listener* get_logger()
 	{
 		// Use magic static
 		static file_listener logger("RPCS3.log");
-		return logger;
+		return &logger;
 	}
 
-	channel GENERAL(nullptr, level::notice);
-	channel LOADER("LDR", level::notice);
-	channel MEMORY("MEM", level::notice);
-	channel RSX("RSX", level::notice);
-	channel HLE("HLE", level::notice);
-	channel PPU("PPU", level::notice);
-	channel SPU("SPU", level::notice);
+	static u64 get_stamp()
+	{
+		static struct time_initializer
+		{
+#ifdef _WIN32
+			LARGE_INTEGER freq;
+			LARGE_INTEGER start;
+
+			time_initializer()
+			{
+				QueryPerformanceFrequency(&freq);
+				QueryPerformanceCounter(&start);
+			}
+#else
+			std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+#endif
+
+			u64 get() const
+			{
+#ifdef _WIN32
+				LARGE_INTEGER now;
+				QueryPerformanceCounter(&now);
+				const LONGLONG diff = now.QuadPart - start.QuadPart;
+				return diff / freq.QuadPart * 1'000'000 + diff % freq.QuadPart * 1'000'000 / freq.QuadPart;
+#else
+				return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+#endif
+			}
+		} timebase{};
+
+		return timebase.get();
+	}
+
+	channel GENERAL("");
+	channel LOADER("LDR");
+	channel MEMORY("MEM");
+	channel RSX("RSX");
+	channel HLE("HLE");
+	channel PPU("PPU");
+	channel SPU("SPU");
 	channel ARMv7("ARMv7");
+
+	struct channel_info
+	{
+		channel* pointer = nullptr;
+		level enabled = level::notice;
+
+		void set_level(level value)
+		{
+			enabled = value;
+
+			if (pointer)
+			{
+				pointer->enabled = value;
+			}
+		}
+	};
+
+	// Channel registry mutex
+	semaphore<> g_mutex;
+
+	// Channel registry
+	std::unordered_map<std::string, channel_info> g_channels;
+
+	void reset()
+	{
+		semaphore_lock lock(g_mutex);
+
+		for (auto&& pair : g_channels)
+		{
+			pair.second.set_level(level::notice);
+		}
+	}
+
+	void set_level(const std::string& ch_name, level value)
+	{
+		semaphore_lock lock(g_mutex);
+
+		g_channels[ch_name].set_level(value);
+	}
 }
 
-void logs::channel::broadcast(const logs::channel& ch, logs::level sev, const char* fmt...)
+logs::listener::~listener()
 {
-	va_list args;
-	va_start(args, fmt);
-	get_logger().log(ch, sev, fmt::unsafe_vformat(fmt, args));
-	va_end(args);
+}
+
+void logs::listener::add(logs::listener* _new)
+{
+	// Get first (main) listener
+	listener* lis = get_logger();
+
+	// Install new listener at the end of linked list
+	while (lis->m_next || !lis->m_next.compare_and_swap_test(nullptr, _new))
+	{
+		lis = lis->m_next;
+	}
+}
+
+void logs::message::broadcast(const char* fmt, const fmt_type_info* sup, const u64* args)
+{
+	// Get timestamp
+	const u64 stamp = get_stamp();
+
+	// Register channel
+	if (ch->enabled == level::_uninit)
+	{
+		semaphore_lock lock(g_mutex);
+
+		auto& info = g_channels[ch->name];
+
+		if (info.pointer && info.pointer != ch)
+		{
+			fmt::throw_exception("logs::channel repetition: %s", ch->name);
+		}
+		else if (!info.pointer)
+		{
+			info.pointer = ch;
+			ch->enabled  = info.enabled;
+
+			// Check level again
+			if (info.enabled < sev)
+			{
+				return;
+			}
+		}
+	}
+
+	// Get text
+	std::string text;
+	fmt::raw_append(text, fmt, sup, args);
+	std::string prefix = g_tls_log_prefix();
+
+	// Get first (main) listener
+	listener* lis = get_logger();
+	
+	// Send message to all listeners
+	while (lis)
+	{
+		lis->log(stamp, *this, prefix, text);
+		lis = lis->m_next;
+	}
 }
 
 [[noreturn]] extern void catch_all_exceptions();
@@ -85,7 +230,7 @@ logs::file_writer::file_writer(const std::string& name)
 	{
 		if (!m_file.open(fs::get_config_dir() + name, fs::rewrite + fs::append))
 		{
-			throw fmt::exception("Can't create log file %s (error %d)", name, fs::g_tls_error);
+			fmt::throw_exception("Can't create log file %s (error %s)", name, fs::g_tls_error);
 		}
 	}
 	catch (...)
@@ -94,54 +239,54 @@ logs::file_writer::file_writer(const std::string& name)
 	}
 }
 
-void logs::file_writer::log(const std::string& text)
+void logs::file_writer::log(const char* text, std::size_t size)
 {
-	m_file.write(text);
+	m_file.write(text, size);
 }
 
-std::size_t logs::file_writer::size() const
+void logs::file_listener::log(u64 stamp, const logs::message& msg, const std::string& prefix, const std::string& _text)
 {
-	return m_file.pos();
-}
-
-void logs::file_listener::log(const logs::channel& ch, logs::level sev, const std::string& text)
-{
-	std::string msg; msg.reserve(text.size() + 200);
+	std::string text; text.reserve(prefix.size() + _text.size() + 200);
 
 	// Used character: U+00B7 (Middle Dot)
-	switch (sev)
+	switch (msg.sev)
 	{
-	case level::always:  msg = u8"·A "; break;
-	case level::fatal:   msg = u8"·F "; break;
-	case level::error:   msg = u8"·E "; break;
-	case level::todo:    msg = u8"·U "; break;
-	case level::success: msg = u8"·S "; break;
-	case level::warning: msg = u8"·W "; break;
-	case level::notice:  msg = u8"·! "; break;
-	case level::trace:   msg = u8"·T "; break;
+	case level::always:  text = u8"·A "; break;
+	case level::fatal:   text = u8"·F "; break;
+	case level::error:   text = u8"·E "; break;
+	case level::todo:    text = u8"·U "; break;
+	case level::success: text = u8"·S "; break;
+	case level::warning: text = u8"·W "; break;
+	case level::notice:  text = u8"·! "; break;
+	case level::trace:   text = u8"·T "; break;
 	}
 
-	// TODO: print time?
+	// Print miscosecond timestamp
+	const u64 hours = stamp / 3600'000'000;
+	const u64 mins = (stamp % 3600'000'000) / 60'000'000;
+	const u64 secs = (stamp % 60'000'000) / 1'000'000;
+	const u64 frac = (stamp % 1'000'000);
+	fmt::append(text, "%u:%02u:%02u.%06u ", hours, mins, secs, frac);
 
-	if (auto prefix = g_tls_log_prefix)
+	if (prefix.size() > 0)
 	{
-		msg += '{';
-		msg += prefix();
-		msg += "} ";
+		text += "{";
+		text += prefix;
+		text += "} ";
 	}
 	
-	if (ch.name)
+	if ('\0' != *msg.ch->name)
 	{
-		msg += ch.name;
-		msg += sev == level::todo ? " TODO: " : ": ";
+		text += msg.ch->name;
+		text += msg.sev == level::todo ? " TODO: " : ": ";
 	}
-	else if (sev == level::todo)
+	else if (msg.sev == level::todo)
 	{
-		msg += "TODO: ";
+		text += "TODO: ";
 	}
 	
-	msg += text;
-	msg += '\n';
+	text += _text;
+	text += '\n';
 
-	file_writer::log(msg);
+	file_writer::log(text.data(), text.size());
 }

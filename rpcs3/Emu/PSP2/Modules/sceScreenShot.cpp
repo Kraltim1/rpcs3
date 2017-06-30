@@ -4,26 +4,26 @@
 
 #include "sceScreenShot.h"
 
-logs::channel sceScreenShot("sceScreenShot", logs::level::notice);
+logs::channel sceScreenShot("sceScreenShot");
 
 s32 sceScreenShotSetParam(vm::cptr<SceScreenShotParam> param)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceScreenShotSetOverlayImage(vm::cptr<char> filePath, s32 offsetX, s32 offsetY)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceScreenShotDisable()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceScreenShotEnable()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

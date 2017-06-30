@@ -4,26 +4,26 @@
 
 #include "sceDbg.h"
 
-logs::channel sceDbg("sceDbg", logs::level::notice);
+logs::channel sceDbg("sceDbg");
 
 s32 sceDbgSetMinimumLogLevel(s32 minimumLogLevel)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceDbgSetBreakOnErrorState(SceDbgBreakOnErrorState state)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceDbgAssertionHandler(vm::cptr<char> pFile, s32 line, b8 stop, vm::cptr<char> pComponent, vm::cptr<char> pMessage, arm_va_args_t va_args)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceDbgLoggingHandler(vm::cptr<char> pFile, s32 line, s32 severity, vm::cptr<char> pComponent, vm::cptr<char> pMessage, arm_va_args_t va_args)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

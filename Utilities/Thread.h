@@ -1,11 +1,14 @@
 #pragma once
 
+#include "types.h"
+#include "Atomic.h"
+
 #include <exception>
 #include <string>
 #include <memory>
 
-#include "Platform.h"
-#include "Atomic.h"
+#include "sema.h"
+#include "cond.h"
 
 // Will report exception and call std::abort() if put in catch(...)
 [[noreturn]] void catch_all_exceptions();
@@ -17,19 +20,19 @@ class task_stack
 	{
 		std::unique_ptr<task_base> next;
 
-		virtual ~task_base() = default;
+		virtual ~task_base();
 
-		virtual void exec()
+		virtual void invoke()
 		{
 			if (next)
 			{
-				next->exec();
+				next->invoke();
 			}
 		}
 	};
 
-	template<typename F>
-	struct task_type : task_base
+	template <typename F>
+	struct task_type final : task_base
 	{
 		std::remove_reference_t<F> func;
 
@@ -38,10 +41,10 @@ class task_stack
 		{
 		}
 
-		void exec() override
+		void invoke() final override
 		{
 			func();
-			task_base::exec();
+			task_base::invoke();
 		}
 	};
 
@@ -50,7 +53,7 @@ class task_stack
 public:
 	task_stack() = default;
 
-	template<typename F>
+	template <typename F>
 	task_stack(F&& func)
 		: m_stack(new task_type<F>(std::forward<F>(func)))
 	{
@@ -70,11 +73,11 @@ public:
 		m_stack.reset();
 	}
 
-	void exec() const
+	void invoke() const
 	{
 		if (m_stack)
 		{
-			m_stack->exec();
+			m_stack->invoke();
 		}
 	}
 };
@@ -82,20 +85,32 @@ public:
 // Thread control class
 class thread_ctrl final
 {
-public: // TODO
-	struct internal;
-
-private:
+	// Current thread
 	static thread_local thread_ctrl* g_tls_this_thread;
 
-	// Thread handle storage
-	std::aligned_storage_t<16> m_thread;
+	// Self pointer
+	std::shared_ptr<thread_ctrl> m_self;
 
-	// Thread join contention counter
-	atomic_t<u32> m_joining{};
+	// Thread handle (platform-specific)
+	atomic_t<std::uintptr_t> m_thread{0};
 
-	// Thread internals
-	atomic_t<internal*> m_data{};
+	// Thread mutex
+	mutable semaphore<> m_mutex;
+
+	// Thread condition variable
+	cond_variable m_cond;
+
+	// Thread flags
+	atomic_t<u32> m_signal{0};
+
+	// Thread joining condition variable
+	cond_variable m_jcv;
+
+	// Remotely set or caught exception
+	std::exception_ptr m_exception;
+
+	// Thread initial task or atexit task
+	task_stack m_task;
 
 	// Fixed name
 	std::string m_name;
@@ -107,19 +122,19 @@ private:
 	void initialize();
 
 	// Called at the thread end
-	void finalize() noexcept;
+	void finalize(std::exception_ptr) noexcept;
 
-	// Get atexit function
-	void push_atexit(task_stack);
+	// Add task (atexit)
+	static void _push(task_stack);
 
-	// Start waiting
-	void wait_start(u64 timeout);
+	// Internal waiting function, may throw. Infinite value is -1.
+	static bool _wait_for(u64 usec);
 
-	// Proceed waiting
-	bool wait_wait(u64 timeout);
+	// Internal throwing function. Mutex must be locked and will be unlocked.
+	[[noreturn]] void _throw();
 
-	// Check exception
-	void test();
+	// Internal notification function
+	void _notify(cond_variable thread_ctrl::*);
 
 public:
 	thread_ctrl(std::string&& name);
@@ -134,119 +149,56 @@ public:
 		return m_name;
 	}
 
-	// Initialize internal data
-	void initialize_once();
+	// Get exception
+	std::exception_ptr get_exception() const;
+
+	// Set exception
+	void set_exception(std::exception_ptr ptr);
 
 	// Get thread result (may throw, simultaneous joining allowed)
 	void join();
 
-	// Lock thread mutex
-	void lock();
-
-	// Lock conditionally (double-checked)
-	template<typename F>
-	bool lock_if(F&& pred)
-	{
-		if (pred())
-		{
-			lock();
-
-			try
-			{
-				if (LIKELY(pred()))
-				{
-					return true;
-				}
-				else
-				{
-					unlock();
-					return false;
-				}
-			}
-			catch (...)
-			{
-				unlock();
-				throw;
-			}
-		}
-		else
-		{
-			return false;
-		}
-	}
-
-	// Unlock thread mutex (internal data must be initialized)
-	void unlock();
-
-	// Lock, unlock, notify the thread (required if the condition changed locklessly)
-	void lock_notify();
-
-	// Notify the thread (internal data must be initialized)
+	// Notify the thread
 	void notify();
 
-	// Set exception (internal data must be initialized, thread mutex must be locked)
-	void set_exception(std::exception_ptr);
-
-	// Current thread sleeps for specified amount of microseconds.
-	// Wrapper for std::this_thread::sleep, doesn't require valid thread_ctrl.
-	[[deprecated]] static void sleep(u64 useconds);
-
-	// Wait until pred(). Abortable, may throw. Thread must be locked.
-	// Timeout in microseconds (zero means infinite).
-	template<typename F>
-	static inline auto wait(u64 useconds, F&& pred)
+	// Wait once with timeout. Abortable, may throw. May spuriously return false.
+	static inline bool wait_for(u64 usec)
 	{
-		g_tls_this_thread->wait_start(useconds);
-
-		while (true)
-		{
-			g_tls_this_thread->test();
-
-			if (auto&& result = pred())
-			{
-				return result;
-			}
-			else if (!g_tls_this_thread->wait_wait(useconds) && useconds)
-			{
-				return result;
-			}
-		}
+		return _wait_for(usec);
 	}
 
-	// Wait until pred(). Abortable, may throw. Thread must be locked.
-	template<typename F>
-	static inline auto wait(F&& pred)
-	{
-		while (true)
-		{
-			g_tls_this_thread->test();
-
-			if (auto&& result = pred())
-			{
-				return result;
-			}
-
-			g_tls_this_thread->wait_wait(0);
-		}
-	}
-
-	// Wait once. Thread must be locked.
+	// Wait. Abortable, may throw.
 	static inline void wait()
 	{
-		g_tls_this_thread->test();
-		g_tls_this_thread->wait_wait(0);
-		g_tls_this_thread->test();
+		_wait_for(-1);
 	}
 
-	// Wait unconditionally until aborted. Thread must be locked.
+	// Wait until pred(). Abortable, may throw.
+	template<typename F, typename RT = std::result_of_t<F()>>
+	static inline RT wait(F&& pred)
+	{
+		while (true)
+		{
+			if (RT result = pred())
+			{
+				return result;
+			}
+
+			_wait_for(-1);
+		}
+	}
+
+	// Wait eternally until aborted.
 	[[noreturn]] static inline void eternalize()
 	{
 		while (true)
 		{
-			g_tls_this_thread->test();
-			g_tls_this_thread->wait_wait(0);
+			_wait_for(-1);
 		}
 	}
+
+	// Test exception (may throw).
+	static void test();
 
 	// Get current thread (may be nullptr)
 	static thread_ctrl* get_current()
@@ -258,22 +210,32 @@ public:
 	template<typename F>
 	static inline void atexit(F&& func)
 	{
-		return g_tls_this_thread->push_atexit(std::forward<F>(func));
+		_push(std::forward<F>(func));
+	}
+
+	// Create detached named thread
+	template<typename N, typename F>
+	static inline void spawn(N&& name, F&& func)
+	{
+		auto out = std::make_shared<thread_ctrl>(std::forward<N>(name));
+
+		thread_ctrl::start(out, std::forward<F>(func));
 	}
 
 	// Named thread factory
 	template<typename N, typename F>
-	static inline std::shared_ptr<thread_ctrl> spawn(N&& name, F&& func)
+	static inline void spawn(std::shared_ptr<thread_ctrl>& out, N&& name, F&& func)
 	{
-		auto ctrl = std::make_shared<thread_ctrl>(std::forward<N>(name));
+		out = std::make_shared<thread_ctrl>(std::forward<N>(name));
 
-		thread_ctrl::start(ctrl, std::forward<F>(func));
-
-		return ctrl;
+		thread_ctrl::start(out, std::forward<F>(func));
 	}
+
+	static void set_native_priority(int priority);
+	static void set_ideal_processor_core(int core);
 };
 
-class named_thread : public std::enable_shared_from_this<named_thread>
+class named_thread
 {
 	// Pointer to managed resource (shared with actual thread)
 	std::shared_ptr<thread_ctrl> m_thread;
@@ -290,8 +252,8 @@ public:
 	virtual std::string get_name() const;
 
 protected:
-	// Start thread (cannot be called from the constructor: should throw bad_weak_ptr in such case)
-	void start();
+	// Start thread (cannot be called from the constructor: should throw in such case)
+	void start_thread(const std::shared_ptr<void>& _this);
 
 	// Thread task (called in the thread)
 	virtual void on_task() = 0;
@@ -299,11 +261,14 @@ protected:
 	// Thread finalization (called after on_task)
 	virtual void on_exit() {}
 
+	// Called once upon thread spawn within the thread's own context
+	virtual void on_spawn() {}
+
 public:
 	// ID initialization
-	virtual void on_init()
+	virtual void on_init(const std::shared_ptr<void>& _this)
 	{
-		start();
+		return start_thread(_this);
 	}
 
 	// ID finalization
@@ -313,42 +278,19 @@ public:
 	}
 
 	// Access thread_ctrl
-	thread_ctrl* operator->() const
+	thread_ctrl* get() const
 	{
 		return m_thread.get();
 	}
-};
 
-// Simple thread mutex locker
-class thread_lock final
-{
-	thread_ctrl* m_thread;
-
-public:
-	thread_lock(const thread_lock&) = delete;
-
-	// Lock specified thread
-	thread_lock(thread_ctrl* thread)
-		: m_thread(thread)
+	void join() const
 	{
-		m_thread->lock();
+		return m_thread->join();
 	}
 
-	// Lock specified named_thread
-	thread_lock(named_thread& thread)
-		: thread_lock(thread.operator->())
+	void notify() const
 	{
-	}
-
-	// Lock current thread
-	thread_lock()
-		: thread_lock(thread_ctrl::get_current())
-	{
-	}
-
-	~thread_lock()
-	{
-		m_thread->unlock();
+		return m_thread->notify();
 	}
 };
 
@@ -360,8 +302,8 @@ class scope_thread final
 public:
 	template<typename N, typename F>
 	scope_thread(N&& name, F&& func)
-		: m_thread(thread_ctrl::spawn(std::forward<N>(name), std::forward<F>(func)))
 	{
+		thread_ctrl::spawn(m_thread, std::forward<N>(name), std::forward<F>(func));
 	}
 
 	// Deleted copy/move constructors + copy/move operators
@@ -371,5 +313,11 @@ public:
 	~scope_thread() noexcept(false)
 	{
 		m_thread->join();
+	}
+
+	// Access thread_ctrl
+	thread_ctrl* get() const
+	{
+		return m_thread.get();
 	}
 };

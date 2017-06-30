@@ -4,26 +4,26 @@
 
 #include "sceCodecEngine.h"
 
-logs::channel sceCodecEngine("sceCodecEngine", logs::level::notice);
+logs::channel sceCodecEngine("sceCodecEngine");
 
 s32 sceCodecEnginePmonStart()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceCodecEnginePmonStop()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceCodecEnginePmonGetProcessorLoad(vm::ptr<SceCodecEnginePmonProcessorLoad> pProcessorLoad)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceCodecEnginePmonReset()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

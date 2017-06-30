@@ -4,26 +4,26 @@
 
 #include "sceMd5.h"
 
-logs::channel sceMd5("sceMd5", logs::level::notice);
+logs::channel sceMd5("sceMd5");
 
 s32 sceMd5Digest(vm::cptr<void> plain, u32 len, vm::ptr<u8> digest)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceMd5BlockInit(vm::ptr<SceMd5Context> pContext)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceMd5BlockUpdate(vm::ptr<SceMd5Context> pContext, vm::cptr<void> plain, u32 len)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceMd5BlockResult(vm::ptr<SceMd5Context> pContext, vm::ptr<u8> digest)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 #define REG_FUNC(nid, name) REG_FNID(SceMd5, nid, name)

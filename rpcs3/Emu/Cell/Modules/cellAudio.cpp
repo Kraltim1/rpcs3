@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "Utilities/Config.h"
 #include "Emu/System.h"
 #include "Emu/IdManager.h"
 #include "Emu/Cell/PPUModule.h"
@@ -11,13 +10,13 @@
 
 #include <thread>
 
-logs::channel cellAudio("cellAudio", logs::level::notice);
+logs::channel cellAudio("cellAudio");
 
-cfg::bool_entry g_cfg_audio_dump_to_file(cfg::root.audio, "Dump to file");
-cfg::bool_entry g_cfg_audio_convert_to_u16(cfg::root.audio, "Convert to 16 bit");
-
-void audio_config::on_task()
+void audio_config::on_init(const std::shared_ptr<void>& _this)
 {
+	m_buffer.set(vm::alloc(AUDIO_PORT_OFFSET * AUDIO_PORT_COUNT, vm::main));
+	m_indexes.set(vm::alloc(sizeof(u64) * AUDIO_PORT_COUNT, vm::main));
+
 	for (u32 i = 0; i < AUDIO_PORT_COUNT; i++)
 	{
 		ports[i].number = i;
@@ -25,22 +24,27 @@ void audio_config::on_task()
 		ports[i].index = m_indexes + i;
 	}
 
-	AudioDumper m_dump(g_cfg_audio_dump_to_file ? 2 : 0); // Init AudioDumper for 2 channels if enabled
+	named_thread::on_init(_this);
+}
+
+void audio_config::on_task()
+{
+	AudioDumper m_dump(g_cfg.audio.dump_to_file ? 2 : 0); // Init AudioDumper for 2 channels if enabled
 
 	float buf2ch[2 * BUFFER_SIZE]{}; // intermediate buffer for 2 channels
 	float buf8ch[8 * BUFFER_SIZE]{}; // intermediate buffer for 8 channels
 
-	static const size_t out_buffer_size = 8 * BUFFER_SIZE; // output buffer for 8 channels
+	const u32 buf_sz = BUFFER_SIZE * (g_cfg.audio.convert_to_u16 ? 2 : 4) * (g_cfg.audio.downmix_to_2ch ? 2 : 8);
 
 	std::unique_ptr<float[]> out_buffer[BUFFER_NUM];
 
 	for (u32 i = 0; i < BUFFER_NUM; i++)
 	{
-		out_buffer[i].reset(new float[out_buffer_size] {});
+		out_buffer[i].reset(new float[8 * BUFFER_SIZE] {});
 	}
 
 	const auto audio = Emu.GetCallbacks().get_audio();
-	audio->Open(buf8ch, out_buffer_size * (g_cfg_audio_convert_to_u16 ? 2 : 4));
+	audio->Open(buf8ch, buf_sz);
 
 	while (fxm::check<audio_config>() && !Emu.IsStopped())
 	{
@@ -208,7 +212,7 @@ void audio_config::on_task()
 			}
 			else
 			{
-				throw EXCEPTION("Unknown channel count (port=%u, channel=%d)", port.number, port.channel);
+				fmt::throw_exception("Unknown channel count (port=%u, channel=%d)" HERE, port.number, port.channel);
 			}
 
 			memset(buf, 0, block_size * sizeof(float));
@@ -217,16 +221,20 @@ void audio_config::on_task()
 
 		if (!first_mix)
 		{
-			// copy output data (2 ch)
-			//for (u32 i = 0; i < (sizeof(buf2ch) / sizeof(float)); i++)
-			//{
-			//	out_buffer[out_pos][i] = buf2ch[i];
-			//}
-
-			// copy output data (8 ch)
-			for (u32 i = 0; i < (sizeof(buf8ch) / sizeof(float)); i++)
+			// Copy output data (2ch or 8ch)
+			if (g_cfg.audio.downmix_to_2ch)
 			{
-				out_buffer[out_pos][i] = buf8ch[i];
+				for (u32 i = 0; i < (sizeof(buf2ch) / sizeof(float)); i++)
+				{
+					out_buffer[out_pos][i] = buf2ch[i];
+				}
+			}
+			else
+			{
+				for (u32 i = 0; i < (sizeof(buf8ch) / sizeof(float)); i++)
+				{
+					out_buffer[out_pos][i] = buf8ch[i];
+				}
 			}
 		}
 
@@ -234,10 +242,10 @@ void audio_config::on_task()
 
 		if (first_mix)
 		{
-			memset(out_buffer[out_pos].get(), 0, out_buffer_size * sizeof(float));
+			std::memset(out_buffer[out_pos].get(), 0, 8 * BUFFER_SIZE * sizeof(float));
 		}
 
-		if (g_cfg_audio_convert_to_u16)
+		if (g_cfg.audio.convert_to_u16)
 		{
 			// convert the data from float to u16 with clipping:
 			// 2x MULPS
@@ -246,20 +254,21 @@ void audio_config::on_task()
 			// 2x CVTPS2DQ (converts float to s32)
 			// PACKSSDW (converts s32 to s16 with signed saturation)
 
-			u16 buf_u16[out_buffer_size];
-			for (size_t i = 0; i < out_buffer_size; i += 8)
+			__m128i buf_u16[BUFFER_SIZE];
+
+			for (size_t i = 0; i < 8 * BUFFER_SIZE; i += 8)
 			{
 				const auto scale = _mm_set1_ps(0x8000);
-				(__m128i&)(buf_u16[i]) = _mm_packs_epi32(
+				buf_u16[i / 8] = _mm_packs_epi32(
 					_mm_cvtps_epi32(_mm_mul_ps(_mm_load_ps(out_buffer[out_pos].get() + i), scale)),
 					_mm_cvtps_epi32(_mm_mul_ps(_mm_load_ps(out_buffer[out_pos].get() + i + 4), scale)));
 			}
 
-			audio->AddData(buf_u16, out_buffer_size * sizeof(u16));
+			audio->AddData(buf_u16, buf_sz);
 		}
 		else
 		{
-			audio->AddData(out_buffer[out_pos].get(), out_buffer_size * sizeof(float));
+			audio->AddData(out_buffer[out_pos].get(), buf_sz);
 		}
 
 		const u64 stamp2 = get_system_time();
@@ -281,14 +290,13 @@ void audio_config::on_task()
 
 			// send aftermix event (normal audio event)
 
-			LV2_LOCK;
+			semaphore_lock lock(mutex);
 
 			for (u64 key : keys)
 			{
-				if (auto&& queue = lv2_event_queue_t::find(key))
+				if (auto queue = lv2_event_queue::find(key))
 				{
-					if (queue->events() < queue->size)
-						queue->push(lv2_lock, 0, 0, 0, 0); // TODO: check arguments
+					queue->send(0, 0, 0, 0); // TODO: check arguments	
 				}
 			}
 		}
@@ -461,7 +469,7 @@ s32 cellAudioGetPortConfig(u32 portNum, vm::ptr<CellAudioPortConfig> portConfig)
 	case audio_port_state::closed: portConfig->status = CELL_AUDIO_STATUS_CLOSE; break;
 	case audio_port_state::opened: portConfig->status = CELL_AUDIO_STATUS_READY; break;
 	case audio_port_state::started: portConfig->status = CELL_AUDIO_STATUS_RUN; break;
-	default: throw fmt::exception("Invalid port state (%d: %d)", portNum, state);
+	default: fmt::throw_exception("Invalid port state (%d: %d)", portNum, (u32)state);
 	}
 
 	portConfig->nChannel = port.channel;
@@ -492,7 +500,7 @@ s32 cellAudioPortStart(u32 portNum)
 	case audio_port_state::closed: return CELL_AUDIO_ERROR_PORT_NOT_OPEN;
 	case audio_port_state::started: return CELL_AUDIO_ERROR_PORT_ALREADY_RUN;
 	case audio_port_state::opened: return CELL_OK;
-	default: throw fmt::exception("Invalid port state (%d: %d)", portNum, state);
+	default: fmt::throw_exception("Invalid port state (%d: %d)", portNum, (u32)state);
 	}
 }
 
@@ -517,7 +525,7 @@ s32 cellAudioPortClose(u32 portNum)
 	case audio_port_state::closed: return CELL_AUDIO_ERROR_PORT_NOT_OPEN;
 	case audio_port_state::started: return CELL_OK;
 	case audio_port_state::opened: return CELL_OK;
-	default: throw fmt::exception("Invalid port state (%d: %d)", portNum, state);
+	default: fmt::throw_exception("Invalid port state (%d: %d)", portNum, (u32)state);
 	}
 }
 
@@ -542,7 +550,7 @@ s32 cellAudioPortStop(u32 portNum)
 	case audio_port_state::closed: return CELL_AUDIO_ERROR_PORT_NOT_RUN;
 	case audio_port_state::started: return CELL_OK;
 	case audio_port_state::opened: return CELL_AUDIO_ERROR_PORT_NOT_RUN;
-	default: throw fmt::exception("Invalid port state (%d: %d)", portNum, state);
+	default: fmt::throw_exception("Invalid port state (%d: %d)", portNum, (u32)state);
 	}
 }
 
@@ -658,16 +666,26 @@ s32 cellAudioCreateNotifyEventQueue(vm::ptr<u32> id, vm::ptr<u64> key)
 {
 	cellAudio.warning("cellAudioCreateNotifyEventQueue(id=*0x%x, key=*0x%x)", id, key);
 
-	for (u64 k = 0; k < 100; k++)
+	vm::var<sys_event_queue_attribute_t> attr;
+	attr->protocol = SYS_SYNC_FIFO;
+	attr->type     = SYS_PPU_QUEUE;
+	attr->name_u64 = 0;
+
+	for (u64 i = 0; i < 100; i++)
 	{
-		const u64 key_value = 0x80004d494f323221ull + k;
-
 		// Create an event queue "bruteforcing" an available key
-		if (auto&& queue = lv2_event_queue_t::make(SYS_SYNC_FIFO, SYS_PPU_QUEUE, 0, key_value, 32))
-		{
-			*id = queue->id;
-			*key = key_value;
+		const u64 key_value = 0x80004d494f323221ull + i;
 
+		if (const s32 res = sys_event_queue_create(id, attr, key_value, 32))
+		{
+			if (res != CELL_EEXIST)
+			{
+				return res;
+			}
+		}
+		else
+		{
+			*key = key_value;
 			return CELL_OK;
 		}
 	}
@@ -700,7 +718,7 @@ s32 cellAudioSetNotifyEventQueue(u64 key)
 		return CELL_AUDIO_ERROR_NOT_INIT;
 	}
 
-	LV2_LOCK;
+	semaphore_lock lock(g_audio->mutex);
 
 	for (auto k : g_audio->keys) // check for duplicates
 	{
@@ -735,7 +753,7 @@ s32 cellAudioRemoveNotifyEventQueue(u64 key)
 		return CELL_AUDIO_ERROR_NOT_INIT;
 	}
 
-	LV2_LOCK;
+	semaphore_lock lock(g_audio->mutex);
 
 	for (auto i = g_audio->keys.begin(); i != g_audio->keys.end(); i++)
 	{
@@ -823,7 +841,11 @@ s32 cellAudioAdd2chData(u32 portNum, vm::ptr<float> src, u32 samples, float volu
 
 	if (port.channel == 2)
 	{
-		cellAudio.error("cellAudioAdd2chData(portNum=%d): port.channel = 2", portNum);
+		for (u32 i = 0; i < samples; i++)
+		{
+			dst[i * 2 + 0] += src[i * 2 + 0] * volume; // mix L ch
+			dst[i * 2 + 1] += src[i * 2 + 1] * volume; // mix R ch
+		}
 	}
 	else if (port.channel == 6)
 	{
@@ -879,9 +901,17 @@ s32 cellAudioAdd6chData(u32 portNum, vm::ptr<float> src, float volume)
 
 	const auto dst = vm::ptr<float>::make(port.addr.addr() + s32(port.tag % port.block) * port.channel * 256 * SIZE_32(float));
 
-	if (port.channel == 2 || port.channel == 6)
+	if (port.channel == 6)
 	{
-		cellAudio.error("cellAudioAdd2chData(portNum=%d): port.channel = %d", portNum, port.channel);
+		for (u32 i = 0; i < 256; i++)
+		{
+			dst[i * 6 + 0] += src[i * 6 + 0] * volume; // mix L ch
+			dst[i * 6 + 1] += src[i * 6 + 1] * volume; // mix R ch
+			dst[i * 6 + 2] += src[i * 6 + 2] * volume; // mix center
+			dst[i * 6 + 3] += src[i * 6 + 3] * volume; // mix LFE
+			dst[i * 6 + 4] += src[i * 6 + 4] * volume; // mix rear L
+			dst[i * 6 + 5] += src[i * 6 + 5] * volume; // mix rear R
+		}
 	}
 	else if (port.channel == 8)
 	{

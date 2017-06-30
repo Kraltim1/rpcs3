@@ -6,24 +6,32 @@
 #include "Thread.h"
 
 #ifdef _WIN32
-#include <windows.h>
+#include <Windows.h>
+#include <Psapi.h>
+#include <process.h>
 #else
 #ifdef __APPLE__
 #define _XOPEN_SOURCE
 #define __USE_GNU
 #endif
+#include <errno.h>
 #include <signal.h>
 #include <ucontext.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #endif
+
+#include "sync.h"
+
+thread_local u64 g_tls_fault_all = 0;
+thread_local u64 g_tls_fault_rsx = 0;
+thread_local u64 g_tls_fault_spu = 0;
 
 static void report_fatal_error(const std::string& msg)
 {
 	std::string _msg = msg + "\n"
-		"HOW TO REPORT ERRORS:\n"
-		"1) Check the FAQ, readme, other sources. Please ensure that your hardware and software configuration is compliant.\n"
-		"2) You must provide FULL information: how to reproduce the error (your actions), RPCS3.log file, other *.log files whenever requested.\n"
-		"3) Please ensure that your software (game) is 'Playable' or close. Please note that 'Non-playable' games will be ignored.\n"
-		"4) If the software (game) is not 'Playable', please ensure that this error is unexpected, i.e. it didn't happen before or similar.\n"
+		"HOW TO REPORT ERRORS: Check the FAQ, README, other sources.\n"
 		"Please, don't send incorrect reports. Thanks for understanding.\n";
 
 #ifdef _WIN32
@@ -102,6 +110,23 @@ enum x64_reg_t : u32
 	X64_IMM16,
 	X64_IMM32,
 
+	X64_BIT_O = 0x90,
+	X64_BIT_NO,
+	X64_BIT_C,
+	X64_BIT_NC,
+	X64_BIT_Z,
+	X64_BIT_NZ,
+	X64_BIT_BE,
+	X64_BIT_NBE,
+	X64_BIT_S,
+	X64_BIT_NS,
+	X64_BIT_P,
+	X64_BIT_NP,
+	X64_BIT_L,
+	X64_BIT_NL,
+	X64_BIT_LE,
+	X64_BIT_NLE,
+
 	X64R_ECX = X64R_CL,
 };
 
@@ -109,16 +134,24 @@ enum x64_op_t : u32
 {
 	X64OP_NONE,
 	X64OP_LOAD, // obtain and put the value into x64 register
+	X64OP_LOAD_BE,
+	X64OP_LOAD_CMP,
+	X64OP_LOAD_TEST,
 	X64OP_STORE, // take the value from x64 register or an immediate and use it
+	X64OP_STORE_BE,
 	X64OP_MOVS,
 	X64OP_STOS,
 	X64OP_XCHG,
 	X64OP_CMPXCHG,
-	X64OP_LOAD_AND_STORE, // lock and [mem], reg
-	X64OP_LOAD_OR_STORE,  // lock or  [mem], reg (TODO)
-	X64OP_LOAD_XOR_STORE, // lock xor [mem], reg (TODO)
-	X64OP_INC, // lock inc [mem] (TODO)
-	X64OP_DEC, // lock dec [mem] (TODO)
+	X64OP_AND, // lock and [mem], ...
+	X64OP_OR,  // lock or  [mem], ...
+	X64OP_XOR, // lock xor [mem], ...
+	X64OP_INC, // lock inc [mem]
+	X64OP_DEC, // lock dec [mem]
+	X64OP_ADD, // lock add [mem], ...
+	X64OP_ADC, // lock adc [mem], ...
+	X64OP_SUB, // lock sub [mem], ...
+	X64OP_SBB, // lock sbb [mem], ...
 };
 
 void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, size_t& out_size, size_t& out_length)
@@ -274,8 +307,9 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 		switch (op2)
 		{
 		case 0x11:
+		case 0x29:
 		{
-			if (!repe && !repne && !oso) // MOVUPS xmm/m, xmm
+			if (!repe && !repne) // MOVUPS/MOVAPS/MOVUPD/MOVAPD xmm/m, xmm
 			{
 				out_op = X64OP_STORE;
 				out_reg = get_modRM_reg_xmm(code, rex);
@@ -321,6 +355,56 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 			}
 			break;
 		}
+		case 0x90:
+		case 0x91:
+		case 0x92:
+		case 0x93:
+		case 0x94:
+		case 0x95:
+		case 0x96:
+		case 0x97:
+		case 0x98:
+		case 0x9a:
+		case 0x9b:
+		case 0x9c:
+		case 0x9d:
+		case 0x9e:
+		case 0x9f:
+		{
+			if (!lock) // SETcc
+			{
+				out_op = X64OP_STORE;
+				out_reg = x64_reg_t(X64_BIT_O + op2 - 0x90); // 0x90 .. 0x9f
+				out_size = 1;
+				out_length += get_modRM_size(code);
+				return;
+			}
+			break;
+		}
+		case 0x38:
+		{
+			out_length++, code++;
+
+			switch (op3)
+			{
+			case 0xf0:
+			case 0xf1:
+			{
+				if (!repne) // MOVBE
+				{
+					out_op = op3 == 0xf0 ? X64OP_LOAD_BE : X64OP_STORE_BE;
+					out_reg = get_modRM_reg(code, rex);
+					out_size = get_op_size(rex, oso);
+					out_length += get_modRM_size(code);
+					return;
+				}
+
+				break;
+			}
+			}
+
+			break;
+		}
 		}
 
 		break;
@@ -329,7 +413,7 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 	{
 		if (!oso)
 		{
-			out_op = X64OP_LOAD_AND_STORE;
+			out_op = X64OP_AND;
 			out_reg = rex & 8 ? get_modRM_reg(code, rex) : get_modRM_reg_lh(code);
 			out_size = 1;
 			out_length += get_modRM_size(code);
@@ -341,13 +425,70 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 	{
 		if (true)
 		{
-			out_op = X64OP_LOAD_AND_STORE;
+			out_op = X64OP_AND;
 			out_reg = get_modRM_reg(code, rex);
 			out_size = get_op_size(rex, oso);
 			out_length += get_modRM_size(code);
 			return;
 		}
 		break;
+	}
+	case 0x80:
+	{
+		switch (auto mod_code = get_modRM_reg(code, 0))
+		{
+		//case 0: out_op = X64OP_ADD; break; // TODO: strange info in instruction manual
+		case 1: out_op = X64OP_OR; break;
+		case 2: out_op = X64OP_ADC; break;
+		case 3: out_op = X64OP_SBB; break;
+		case 4: out_op = X64OP_AND; break;
+		case 5: out_op = X64OP_SUB; break;
+		case 6: out_op = X64OP_XOR; break;
+		default: out_op = X64OP_LOAD_CMP; break;
+		}
+
+		out_reg = X64_IMM8;
+		out_size = 1;
+		out_length += get_modRM_size(code) + 1;
+		return;
+	}
+	case 0x81:
+	{
+		switch (auto mod_code = get_modRM_reg(code, 0))
+		{
+		case 0: out_op = X64OP_ADD; break;
+		case 1: out_op = X64OP_OR; break;
+		case 2: out_op = X64OP_ADC; break;
+		case 3: out_op = X64OP_SBB; break;
+		case 4: out_op = X64OP_AND; break;
+		case 5: out_op = X64OP_SUB; break;
+		case 6: out_op = X64OP_XOR; break;
+		default: out_op = X64OP_LOAD_CMP; break;
+		}
+
+		out_reg = oso ? X64_IMM16 : X64_IMM32;
+		out_size = get_op_size(rex, oso);
+		out_length += get_modRM_size(code) + (oso ? 2 : 4);
+		return;
+	}
+	case 0x83:
+	{
+		switch (auto mod_code = get_modRM_reg(code, 0))
+		{
+		case 0: out_op = X64OP_ADD; break;
+		case 1: out_op = X64OP_OR; break;
+		case 2: out_op = X64OP_ADC; break;
+		case 3: out_op = X64OP_SBB; break;
+		case 4: out_op = X64OP_AND; break;
+		case 5: out_op = X64OP_SUB; break;
+		case 6: out_op = X64OP_XOR; break;
+		default: out_op = X64OP_LOAD_CMP; break;
+		}
+
+		out_reg = X64_IMM8;
+		out_size = get_op_size(rex, oso);
+		out_length += get_modRM_size(code) + 1;
+		return;
 	}
 	case 0x86:
 	{
@@ -457,9 +598,60 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 		}
 		break;
 	}
+	case 0xc4: // 3-byte VEX prefix
+	case 0xc5: // 2-byte VEX prefix
+	{
+		// Last prefix byte: op2 or op3
+		const u8 opx = op1 == 0xc5 ? op2 : op3;
+
+		// Implied prefixes
+		rex |= op2 & 0x80 ? 0 : 0x4; // REX.R
+		rex |= op1 == 0xc4 && op3 & 0x80 ? 0x8 : 0; // REX.W ???
+		oso = (opx & 0x3) == 0x1;
+		repe = (opx & 0x3) == 0x2;
+		repne = (opx & 0x3) == 0x3;
+
+		const u8 vopm = op1 == 0xc5 ? 1 : op2 & 0x1f;
+		const u8 vop1 = op1 == 0xc5 ? op3 : code[2];
+		const u8 vlen = (opx & 0x4) ? 32 : 16;
+		const u8 vreg = (~opx >> 3) & 0xf;
+		out_length += op1 == 0xc5 ? 2 : 3;
+		code += op1 == 0xc5 ? 2 : 3;
+
+		if (vopm == 0x1) switch (vop1) // Implied leading byte 0x0F
+		{
+		case 0x11:
+		case 0x29:
+		{
+			if (!repe && !repne) // VMOVAPS/VMOVAPD/VMOVUPS/VMOVUPD mem,reg
+			{
+				out_op = X64OP_STORE;
+				out_reg = get_modRM_reg_xmm(code, rex);
+				out_size = vlen;
+				out_length += get_modRM_size(code);
+				return;
+			}
+			break;
+		}
+		case 0x7f:
+		{
+			if (repe || oso) // VMOVDQU/VMOVDQA mem,reg
+			{
+				out_op = X64OP_STORE;
+				out_reg = get_modRM_reg_xmm(code, rex);
+				out_size = vlen;
+				out_length += get_modRM_size(code);
+				return;
+			}
+			break;
+		}
+		}
+
+		break;
+	}
 	case 0xc6:
 	{
-		if (!lock && !oso && get_modRM_reg(code, 0) == X64R_RAX) // MOV r8/m8, imm8
+		if (!lock && !oso && get_modRM_reg(code, 0) == 0) // MOV r8/m8, imm8
 		{
 			out_op = X64OP_STORE;
 			out_reg = X64_IMM8;
@@ -471,7 +663,7 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 	}
 	case 0xc7:
 	{
-		if (!lock && get_modRM_reg(code, 0) == X64R_RAX) // MOV r/m, imm16/imm32 (16, 32, 64)
+		if (!lock && get_modRM_reg(code, 0) == 0) // MOV r/m, imm16/imm32 (16, 32, 64)
 		{
 			out_op = X64OP_STORE;
 			out_reg = oso ? X64_IMM16 : X64_IMM32;
@@ -480,6 +672,32 @@ void decode_x64_reg_op(const u8* code, x64_op_t& out_op, x64_reg_t& out_reg, siz
 			return;
 		}
 		break;
+	}
+	case 0xf6:
+	{
+		switch (auto mod_code = get_modRM_reg(code, 0))
+		{
+		case 0: out_op = X64OP_LOAD_TEST; break;
+		default: out_op = X64OP_NONE; break; // TODO...
+		}
+
+		out_reg = X64_IMM8;
+		out_size = 1;
+		out_length += get_modRM_size(code) + 1;
+		return;
+	}
+	case 0xf7:
+	{
+		switch (auto mod_code = get_modRM_reg(code, 0))
+		{
+		case 0: out_op = X64OP_LOAD_TEST; break;
+		default: out_op = X64OP_NONE; break; // TODO...
+		}
+
+		out_reg = oso ? X64_IMM16 : X64_IMM32;
+		out_size = get_op_size(rex, oso);
+		out_length += get_modRM_size(code) + (oso ? 2 : 4);
+		return;
 	}
 	}
 
@@ -538,6 +756,90 @@ uint64_t* darwin_x64reg(x64_context *context, int reg)
 	}
 }
 
+#elif defined(__DragonFly__) || defined(__FreeBSD__)
+
+#define X64REG(context, reg) (freebsd_x64reg(context, reg))
+#ifdef __DragonFly__
+#  define XMMREG(context, reg) (reinterpret_cast<v128*>(((union savefpu*)(context)->uc_mcontext.mc_fpregs)->sv_xmm.sv_xmm[reg]))
+#else
+#  define XMMREG(context, reg) (reinterpret_cast<v128*>(((struct savefpu*)(context)->uc_mcontext.mc_fpstate)->sv_xmm[reg]))
+#endif
+#define EFLAGS(context) ((context)->uc_mcontext.mc_rflags)
+
+register_t* freebsd_x64reg(x64_context *context, int reg)
+{
+	auto *state = &context->uc_mcontext;
+	switch(reg)
+	{
+	case 0: return &state->mc_rax;
+	case 1: return &state->mc_rcx;
+	case 2: return &state->mc_rdx;
+	case 3: return &state->mc_rbx;
+	case 4: return &state->mc_rsp;
+	case 5: return &state->mc_rbp;
+	case 6: return &state->mc_rsi;
+	case 7: return &state->mc_rdi;
+	case 8: return &state->mc_r8;
+	case 9: return &state->mc_r9;
+	case 10: return &state->mc_r10;
+	case 11: return &state->mc_r11;
+	case 12: return &state->mc_r12;
+	case 13: return &state->mc_r13;
+	case 14: return &state->mc_r14;
+	case 15: return &state->mc_r15;
+	case 16: return &state->mc_rip;
+	default:
+		LOG_ERROR(GENERAL, "Invalid register index: %d", reg);
+		return nullptr;
+	}
+}
+
+#elif defined(__OpenBSD__)
+
+#define X64REG(context, reg) (openbsd_x64reg(context, reg))
+#define XMMREG(context, reg) (reinterpret_cast<v128*>((context)->sc_fpstate->fx_xmm[reg]))
+#define EFLAGS(context) ((context)->sc_rflags)
+
+long* openbsd_x64reg(x64_context *context, int reg)
+{
+	auto *state = &context->uc_mcontext;
+	switch(reg)
+	{
+	case 0: return &state->sc_rax;
+	case 1: return &state->sc_rcx;
+	case 2: return &state->sc_rdx;
+	case 3: return &state->sc_rbx;
+	case 4: return &state->sc_rsp;
+	case 5: return &state->sc_rbp;
+	case 6: return &state->sc_rsi;
+	case 7: return &state->sc_rdi;
+	case 8: return &state->sc_r8;
+	case 9: return &state->sc_r9;
+	case 10: return &state->sc_r10;
+	case 11: return &state->sc_r11;
+	case 12: return &state->sc_r12;
+	case 13: return &state->sc_r13;
+	case 14: return &state->sc_r14;
+	case 15: return &state->sc_r15;
+	case 16: return &state->sc_rip;
+	default:
+		LOG_ERROR(GENERAL, "Invalid register index: %d", reg);
+		return nullptr;
+	}
+}
+
+#elif defined(__NetBSD__)
+
+static const decltype(_REG_RAX) reg_table[] =
+{
+	_REG_RAX, _REG_RCX, _REG_RDX, _REG_RBX, _REG_RSP, _REG_RBP, _REG_RSI, _REG_RDI,
+	_REG_R8, _REG_R9, _REG_R10, _REG_R11, _REG_R12, _REG_R13, _REG_R14, _REG_R15, _REG_RIP
+};
+
+#define X64REG(context, reg) (&(context)->uc_mcontext.__gregs[reg_table[reg]])
+#define XMM_sig(context, reg) (reinterpret_cast<v128*>(((struct fxsave64*)(context)->uc_mcontext.__fpregs)->fx_xmm[reg]))
+#define EFLAGS(context) ((context)->uc_mcontext.__gregs[_REG_RFL])
+
 #else
 
 static const decltype(REG_RAX) reg_table[] =
@@ -547,7 +849,11 @@ static const decltype(REG_RAX) reg_table[] =
 };
 
 #define X64REG(context, reg) (&(context)->uc_mcontext.gregs[reg_table[reg]])
+#ifdef __sun
+#define XMMREG(context, reg) (reinterpret_cast<v128*>(&(context)->uc_mcontext.fpregs.fp_reg_set.fpchip_state.xmm[reg_table[reg]]))
+#else
 #define XMMREG(context, reg) (reinterpret_cast<v128*>(&(context)->uc_mcontext.fpregs->_xmm[reg]))
+#endif // __sun
 #define EFLAGS(context) ((context)->uc_mcontext.gregs[REG_EFL])
 
 #endif // __APPLE__
@@ -599,6 +905,9 @@ bool get_x64_reg_value(x64_context* context, x64_reg_t reg, size_t d_size, size_
 		switch (d_size)
 		{
 		case 1: out_value = (u8)imm_value; return true;
+		case 2: out_value = (u16)imm_value; return true; // sign-extended
+		case 4: out_value = (u32)imm_value; return true; // sign-extended
+		case 8: out_value = (u64)imm_value; return true; // sign-extended
 		}
 	}
 	else if (reg == X64_IMM16)
@@ -625,8 +934,31 @@ bool get_x64_reg_value(x64_context* context, x64_reg_t reg, size_t d_size, size_
 		out_value = (u32)RCX(context);
 		return true;
 	}
+	else if (reg >= X64_BIT_O && reg <= X64_BIT_NLE)
+	{
+		const u32 _cf = EFLAGS(context) & 0x1;
+		const u32 _zf = EFLAGS(context) & 0x40;
+		const u32 _sf = EFLAGS(context) & 0x80;
+		const u32 _of = EFLAGS(context) & 0x800;
+		const u32 _pf = EFLAGS(context) & 0x4;
+		const u32 _l = (_sf << 4) ^ _of; // SF != OF
 
-	LOG_ERROR(MEMORY, "get_x64_reg_value(): invalid arguments (reg=%d, d_size=%lld, i_size=%lld)", reg, d_size, i_size);
+		switch (reg & ~1)
+		{
+		case X64_BIT_O: out_value = !!_of ^ (reg & 1); break;
+		case X64_BIT_C: out_value = !!_cf ^ (reg & 1); break;
+		case X64_BIT_Z: out_value = !!_zf ^ (reg & 1); break;
+		case X64_BIT_BE: out_value = !!(_cf | _zf) ^ (reg & 1); break;
+		case X64_BIT_S: out_value = !!_sf ^ (reg & 1); break;
+		case X64_BIT_P: out_value = !!_pf ^ (reg & 1); break;
+		case X64_BIT_L: out_value = !!_l ^ (reg & 1); break;
+		case X64_BIT_LE: out_value = !!(_l | _zf) ^ (reg & 1); break;
+		}
+
+		return true;
+	}
+
+	LOG_ERROR(MEMORY, "get_x64_reg_value(): invalid arguments (reg=%d, d_size=%lld, i_size=%lld)", (u32)reg, d_size, i_size);
 	return false;
 }
 
@@ -645,11 +977,11 @@ bool put_x64_reg_value(x64_context* context, x64_reg_t reg, size_t d_size, u64 v
 		}
 	}
 
-	LOG_ERROR(MEMORY, "put_x64_reg_value(): invalid destination (reg=%d, d_size=%lld, value=0x%llx)", reg, d_size, value);
+	LOG_ERROR(MEMORY, "put_x64_reg_value(): invalid destination (reg=%d, d_size=%lld, value=0x%llx)", (u32)reg, d_size, value);
 	return false;
 }
 
-bool set_x64_cmp_flags(x64_context* context, size_t d_size, u64 x, u64 y)
+bool set_x64_cmp_flags(x64_context* context, size_t d_size, u64 x, u64 y, bool carry = true)
 {
 	switch (d_size)
 	{
@@ -664,11 +996,11 @@ bool set_x64_cmp_flags(x64_context* context, size_t d_size, u64 x, u64 y)
 	const u64 diff = x - y;
 	const u64 summ = x + y;
 
-	if (((x & y) | ((x ^ y) & ~summ)) & sign)
+	if (carry && ((x & y) | ((x ^ y) & ~summ)) & sign)
 	{
 		EFLAGS(context) |= 0x1; // set CF
 	}
-	else
+	else if (carry)
 	{
 		EFLAGS(context) &= ~0x1; // clear CF
 	}
@@ -731,7 +1063,7 @@ size_t get_x64_access_size(x64_context* context, x64_op_t op, x64_reg_t reg, siz
 	{
 		if (EFLAGS(context) & 0x400 /* direction flag */)
 		{
-			// skip reservation bound check (TODO)
+			// TODO
 			return 0;
 		}
 
@@ -747,22 +1079,6 @@ size_t get_x64_access_size(x64_context* context, x64_op_t op, x64_reg_t reg, siz
 		}
 	}
 
-	if (op == X64OP_CMPXCHG)
-	{
-		// Detect whether the instruction can't actually modify memory to avoid breaking reservation
-		u64 cmp, exch;
-		if (!get_x64_reg_value(context, reg, d_size, i_size, cmp) || !get_x64_reg_value(context, X64R_RAX, d_size, i_size, exch))
-		{
-			return -1;
-		}
-
-		if (cmp == exch)
-		{
-			// skip reservation bound check
-			return 0;
-		}
-	}
-
 	return d_size;
 }
 
@@ -773,8 +1089,19 @@ namespace rsx
 
 bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 {
+	g_tls_fault_all++;
+
+	const auto cpu = get_current_cpu_thread();
+
 	if (rsx::g_access_violation_handler && rsx::g_access_violation_handler(addr, is_writing))
 	{
+		g_tls_fault_rsx++;
+
+		if (cpu)
+		{
+			cpu->test_state();
+		}
+
 		return true;
 	}
 
@@ -792,7 +1119,7 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 	{
 		if (op == X64OP_NONE)
 		{
-			LOG_ERROR(MEMORY, "decode_x64_reg_op(%016llxh): unsupported opcode found (%016llX%016llX)", code, *(be_t<u64>*)(code), *(be_t<u64>*)(code + 8));
+			LOG_ERROR(MEMORY, "decode_x64_reg_op(%p): unsupported opcode: %s", code, *(be_t<v128, 1>*)code);
 		}
 	};
 
@@ -825,7 +1152,7 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 
 		if (a_size != 4 || !d_size || !i_size)
 		{
-			LOG_ERROR(MEMORY, "Invalid or unsupported instruction (op=%d, reg=%d, d_size=%lld, a_size=0x%llx, i_size=%lld)", op, reg, d_size, a_size, i_size);
+			LOG_ERROR(MEMORY, "Invalid or unsupported instruction (op=%d, reg=%d, d_size=%lld, a_size=0x%llx, i_size=%lld)", (u32)op, (u32)reg, d_size, a_size, i_size);
 			report_opcode();
 			return false;
 		}
@@ -833,9 +1160,44 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 		switch (op)
 		{
 		case X64OP_LOAD:
+		case X64OP_LOAD_BE:
+		case X64OP_LOAD_CMP:
+		case X64OP_LOAD_TEST:
 		{
 			u32 value;
-			if (is_writing || !thread->read_reg(addr, value) || !put_x64_reg_value(context, reg, d_size, se_storage<u32>::swap(value)))
+			if (is_writing || !thread->read_reg(addr, value))
+			{
+				return false;
+			}
+
+			if (op != X64OP_LOAD_BE)
+			{
+				value = se_storage<u32>::swap(value);
+			}
+
+			if (op == X64OP_LOAD_CMP)
+			{
+				u64 rvalue;
+				if (!get_x64_reg_value(context, reg, d_size, i_size, rvalue) || !set_x64_cmp_flags(context, d_size, value, rvalue))
+				{
+					return false;
+				}
+
+				break;
+			}
+
+			if (op == X64OP_LOAD_TEST)
+			{
+				u64 rvalue;
+				if (!get_x64_reg_value(context, reg, d_size, i_size, rvalue) || !set_x64_cmp_flags(context, d_size, value & rvalue, 0))
+				{
+					return false;
+				}
+
+				break;
+			}
+
+			if (!put_x64_reg_value(context, reg, d_size, value))
 			{
 				return false;
 			}
@@ -843,9 +1205,15 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 			break;
 		}
 		case X64OP_STORE:
+		case X64OP_STORE_BE:
 		{
 			u64 reg_value;
-			if (!is_writing || !get_x64_reg_value(context, reg, d_size, i_size, reg_value) || !thread->write_reg(addr, se_storage<u32>::swap((u32)reg_value)))
+			if (!is_writing || !get_x64_reg_value(context, reg, d_size, i_size, reg_value))
+			{
+				return false;
+			}
+
+			if (!thread->write_reg(addr, op == X64OP_STORE ? se_storage<u32>::swap((u32)reg_value) : (u32)reg_value))
 			{
 				return false;
 			}
@@ -856,7 +1224,7 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 		case X64OP_STOS:
 		default:
 		{
-			LOG_ERROR(MEMORY, "Invalid or unsupported operation (op=%d, reg=%d, d_size=%lld, i_size=%lld)", op, reg, d_size, i_size);
+			LOG_ERROR(MEMORY, "Invalid or unsupported operation (op=%d, reg=%d, d_size=%lld, i_size=%lld)", (u32)op, (u32)reg, d_size, i_size);
 			report_opcode();
 			return false;
 		}
@@ -864,271 +1232,106 @@ bool handle_access_violation(u32 addr, bool is_writing, x64_context* context)
 
 		// skip processed instruction
 		RIP(context) += i_size;
+		g_tls_fault_spu++;
 		return true;
 	}
 
-	// check if fault is caused by the reservation
-	return vm::reservation_query(addr, (u32)a_size, is_writing, [&]() -> bool
+	if (vm::check_addr(addr, std::max<std::size_t>(1, d_size)))
 	{
-		// write memory using "privileged" access to avoid breaking reservation
-		if (!d_size || !i_size)
+		if (cpu)
 		{
-			LOG_ERROR(MEMORY, "Invalid or unsupported instruction (op=%d, reg=%d, d_size=%lld, a_size=0x%llx, i_size=%lld)", op, reg, d_size, a_size, i_size);
-			report_opcode();
-			return false;
+			cpu->test_state();
 		}
 
-		switch (op)
-		{
-		case X64OP_STORE:
-		{
-			if (d_size == 16)
-			{
-				if (reg - X64R_XMM0 >= 16)
-				{
-					LOG_ERROR(MEMORY, "X64OP_STORE: d_size=16, reg=%d", reg);
-					return false;
-				}
-
-				std::memcpy(vm::base_priv(addr), XMMREG(context, reg - X64R_XMM0), 16);
-				break;
-			}
-
-			u64 reg_value;
-			if (!get_x64_reg_value(context, reg, d_size, i_size, reg_value))
-			{
-				return false;
-			}
-
-			std::memcpy(vm::base_priv(addr), &reg_value, d_size);
-			break;
-		}
-		case X64OP_MOVS:
-		{
-			if (d_size > 8)
-			{
-				LOG_ERROR(MEMORY, "X64OP_MOVS: d_size=%lld", d_size);
-				return false;
-			}
-
-			if (vm::base(addr) != (void*)RDI(context))
-			{
-				LOG_ERROR(MEMORY, "X64OP_MOVS: rdi=0x%llx, rsi=0x%llx, addr=0x%x", (u64)RDI(context), (u64)RSI(context), addr);
-				return false;
-			}
-
-			u32 a_addr = addr;
-
-			while (a_addr >> 12 == addr >> 12)
-			{
-				u64 value;
-
-				// copy data
-				std::memcpy(&value, (void*)RSI(context), d_size);
-				std::memcpy(vm::base_priv(a_addr), &value, d_size);
-
-				// shift pointers
-				if (EFLAGS(context) & 0x400 /* direction flag */)
-				{
-					LOG_ERROR(MEMORY, "X64OP_MOVS TODO: reversed direction");
-					return false;
-					//RSI(context) -= d_size;
-					//RDI(context) -= d_size;
-					//a_addr -= (u32)d_size;
-				}
-				else
-				{
-					RSI(context) += d_size;
-					RDI(context) += d_size;
-					a_addr += (u32)d_size;
-				}
-
-				// decrement counter
-				if (reg == X64_NOT_SET || !--RCX(context))
-				{
-					break;
-				}
-			}
-
-			if (reg == X64_NOT_SET || !RCX(context))
-			{
-				break;
-			}
-
-			// don't skip partially processed instruction
-			return true;
-		}
-		case X64OP_STOS:
-		{
-			if (d_size > 8)
-			{
-				LOG_ERROR(MEMORY, "X64OP_STOS: d_size=%lld", d_size);
-				return false;
-			}
-
-			if (vm::base(addr) != (void*)RDI(context))
-			{
-				LOG_ERROR(MEMORY, "X64OP_STOS: rdi=0x%llx, addr=0x%x", (u64)RDI(context), addr);
-				return false;
-			}
-
-			u64 value;
-			if (!get_x64_reg_value(context, X64R_RAX, d_size, i_size, value))
-			{
-				return false;
-			}
-
-			u32 a_addr = addr;
-
-			while (a_addr >> 12 == addr >> 12)
-			{
-				// fill data with value
-				std::memcpy(vm::base_priv(a_addr), &value, d_size);
-
-				// shift pointers
-				if (EFLAGS(context) & 0x400 /* direction flag */)
-				{
-					LOG_ERROR(MEMORY, "X64OP_STOS TODO: reversed direction");
-					return false;
-					//RDI(context) -= d_size;
-					//a_addr -= (u32)d_size;
-				}
-				else
-				{
-					RDI(context) += d_size;
-					a_addr += (u32)d_size;
-				}
-
-				// decrement counter
-				if (reg == X64_NOT_SET || !--RCX(context))
-				{
-					break;
-				}
-			}
-
-			if (reg == X64_NOT_SET || !RCX(context))
-			{
-				break;
-			}
-
-			// don't skip partially processed instruction
-			return true;
-		}
-		case X64OP_XCHG:
-		{
-			u64 reg_value;
-			if (!get_x64_reg_value(context, reg, d_size, i_size, reg_value))
-			{
-				return false;
-			}
-
-			switch (d_size)
-			{
-			case 1: reg_value = ((atomic_t<u8>*)vm::base_priv(addr))->exchange((u8)reg_value); break;
-			case 2: reg_value = ((atomic_t<u16>*)vm::base_priv(addr))->exchange((u16)reg_value); break;
-			case 4: reg_value = ((atomic_t<u32>*)vm::base_priv(addr))->exchange((u32)reg_value); break;
-			case 8: reg_value = ((atomic_t<u64>*)vm::base_priv(addr))->exchange((u64)reg_value); break;
-			default: return false;
-			}
-
-			if (!put_x64_reg_value(context, reg, d_size, reg_value))
-			{
-				return false;
-			}
-			break;
-		}
-		case X64OP_CMPXCHG:
-		{
-			u64 reg_value, old_value, cmp_value;
-			if (!get_x64_reg_value(context, reg, d_size, i_size, reg_value) || !get_x64_reg_value(context, X64R_RAX, d_size, i_size, cmp_value))
-			{
-				return false;
-			}
-
-			switch (d_size)
-			{
-			case 1: old_value = ((atomic_t<u8>*)vm::base_priv(addr))->compare_and_swap((u8)cmp_value, (u8)reg_value); break;
-			case 2: old_value = ((atomic_t<u16>*)vm::base_priv(addr))->compare_and_swap((u16)cmp_value, (u16)reg_value); break;
-			case 4: old_value = ((atomic_t<u32>*)vm::base_priv(addr))->compare_and_swap((u32)cmp_value, (u32)reg_value); break;
-			case 8: old_value = ((atomic_t<u64>*)vm::base_priv(addr))->compare_and_swap((u64)cmp_value, (u64)reg_value); break;
-			default: return false;
-			}
-
-			if (!put_x64_reg_value(context, X64R_RAX, d_size, old_value) || !set_x64_cmp_flags(context, d_size, cmp_value, old_value))
-			{
-				return false;
-			}
-			break;
-		}
-		case X64OP_LOAD_AND_STORE:
-		{
-			u64 value;
-			if (!get_x64_reg_value(context, reg, d_size, i_size, value))
-			{
-				return false;
-			}
-
-			switch (d_size)
-			{
-			case 1: value = *(atomic_t<u8>*)vm::base_priv(addr) &= (u8)value; break;
-			case 2: value = *(atomic_t<u16>*)vm::base_priv(addr) &= (u16)value; break;
-			case 4: value = *(atomic_t<u32>*)vm::base_priv(addr) &= (u32)value; break;
-			case 8: value = *(atomic_t<u64>*)vm::base_priv(addr) &= (u64)value; break;
-			default: return false;
-			}
-
-			if (!set_x64_cmp_flags(context, d_size, value, 0))
-			{
-				return false;
-			}
-			break;
-		}
-		default:
-		{
-			LOG_ERROR(MEMORY, "Invalid or unsupported operation (op=%d, reg=%d, d_size=%lld, a_size=0x%llx, i_size=%lld)", op, reg, d_size, a_size, i_size);
-			report_opcode();
-			return false;
-		}
-		}
-
-		// skip processed instruction
-		RIP(context) += i_size;
 		return true;
-	});
+	}
 
 	// TODO: allow recovering from a page fault as a feature of PS3 virtual memory
+	if (cpu)
+	{
+		LOG_FATAL(MEMORY, "Access violation %s location 0x%x", is_writing ? "writing" : "reading", addr);
+		cpu->state += cpu_flag::dbg_pause;
+		cpu->check_state();
+	}
+
+	return true;
 }
 
-[[noreturn]] static void throw_access_violation(const char* cause, u64 addr)
+#ifdef __linux__
+extern "C" struct dwarf_eh_bases
 {
-	vm::throw_access_violation(addr, cause);
-	std::abort();
-}
+	void* tbase;
+	void* dbase;
+	void* func;
+};
 
-// Modify context in order to convert hardware exception to C++ exception
-static void prepare_throw_access_violation(x64_context* context, const char* cause, u32 address)
+extern "C" struct fde* _Unwind_Find_FDE(void* pc, struct dwarf_eh_bases* bases);
+#endif
+
+// Detect leaf function
+static bool is_leaf_function(u64 rip)
 {
-	// Set throw_access_violation() call args (old register values are lost)
-	ARG1(context) = (u64)cause;
-	ARG2(context) = address;
+#ifdef _WIN32
+	DWORD64 base = 0;
+	if (const auto rtf = RtlLookupFunctionEntry(rip, &base, nullptr))
+	{
+		// Access UNWIND_INFO structure
+		const auto uw = (u8*)(base + rtf->UnwindData);
 
-	// Push the exception address as a "return" address (throw_access_violation() shall not return)
-	*--(u64*&)(RSP(context)) = RIP(context);
-	RIP(context) = (u64)std::addressof(throw_access_violation);
+		// Leaf function has zero epilog size and no unwind codes
+		return uw[0] == 1 && uw[1] == 0 && uw[2] == 0 && uw[3] == 0;
+	}
+
+	// No unwind info implies leaf function
+	return true;
+#elif __linux__
+	struct dwarf_eh_bases bases;
+
+	if (struct fde* f = _Unwind_Find_FDE(reinterpret_cast<void*>(rip), &bases))
+	{
+		const auto words = (const u32*)f;
+
+		if (words[0] < 0x14)
+		{
+			return true;
+		}
+
+		if (words[0] == 0x14 && !words[3] && !words[4])
+		{
+			return true;
+		}
+
+		// TODO
+		return false;
+	}
+
+	// No unwind info implies leaf function
+	return true;
+#else
+	// Unsupported
+	return false;
+#endif
 }
 
 #ifdef _WIN32
 
 static LONG exception_handler(PEXCEPTION_POINTERS pExp)
 {
-	const u64 addr64 = pExp->ExceptionRecord->ExceptionInformation[1] - (u64)vm::base(0);
+	const u64 addr64 = pExp->ExceptionRecord->ExceptionInformation[1] - (u64)vm::g_base_addr;
+	const u64 exec64 = pExp->ExceptionRecord->ExceptionInformation[1] - (u64)vm::g_exec_addr;
 	const bool is_writing = pExp->ExceptionRecord->ExceptionInformation[0] != 0;
 
 	if (pExp->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && addr64 < 0x100000000ull)
 	{
-		vm::g_tls_fault_count++;
-
 		if (thread_ctrl::get_current() && handle_access_violation((u32)addr64, is_writing, pExp->ContextRecord))
+		{
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+	}
+
+	if (pExp->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && exec64 < 0x100000000ull)
+	{
+		if (thread_ctrl::get_current() && handle_access_violation((u32)exec64, is_writing, pExp->ContextRecord))
 		{
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
@@ -1143,18 +1346,9 @@ static LONG exception_filter(PEXCEPTION_POINTERS pExp)
 
 	if (pExp->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
 	{
-		const u64 addr64 = pExp->ExceptionRecord->ExceptionInformation[1] - (u64)vm::base(0);
 		const auto cause = pExp->ExceptionRecord->ExceptionInformation[0] != 0 ? "writing" : "reading";
 
-		if (!(vm::g_tls_fault_count & (1ull << 63)) && addr64 < 0x100000000ull)
-		{
-			vm::g_tls_fault_count |= (1ull << 63);
-			// Setup throw_access_violation() call on the context
-			prepare_throw_access_violation(pExp->ContextRecord, cause, (u32)addr64);
-			return EXCEPTION_CONTINUE_EXECUTION;
-		}
-
-		msg += fmt::format("Access violation %s location %p at %p.\n", cause, pExp->ExceptionRecord->ExceptionInformation[1], pExp->ExceptionRecord->ExceptionAddress);
+		msg += fmt::format("Segfault %s location %p at %p.\n", cause, pExp->ExceptionRecord->ExceptionInformation[1], pExp->ExceptionRecord->ExceptionAddress);
 	}
 	else
 	{
@@ -1166,8 +1360,58 @@ static LONG exception_filter(PEXCEPTION_POINTERS pExp)
 		}
 	}
 
+	std::vector<HMODULE> modules;
+	for (DWORD size = 256; modules.size() != size; size /= sizeof(HMODULE))
+	{
+		modules.resize(size);
+		if (!EnumProcessModules(GetCurrentProcess(), modules.data(), size * sizeof(HMODULE), &size))
+		{
+			modules.clear();
+			break;
+		}
+	}
+
 	msg += fmt::format("Instruction address: %p.\n", pExp->ContextRecord->Rip);
-	msg += fmt::format("Image base: %p.\n", GetModuleHandle(NULL));
+
+	DWORD64 unwind_base;
+	if (const auto rtf = RtlLookupFunctionEntry(pExp->ContextRecord->Rip, &unwind_base, nullptr))
+	{
+		// Get function address
+		const DWORD64 func_addr = rtf->BeginAddress + unwind_base;
+		msg += fmt::format("Function address: %p (base+0x%x).\n", func_addr, rtf->BeginAddress);
+
+		// Access UNWIND_INFO structure
+		//const auto uw = (u8*)(unwind_base + rtf->UnwindData);
+	}
+
+	for (HMODULE module : modules)
+	{
+		MODULEINFO info;
+		if (GetModuleInformation(GetCurrentProcess(), module, &info, sizeof(info)))
+		{
+			const DWORD64 base = (DWORD64)info.lpBaseOfDll;
+
+			if (pExp->ContextRecord->Rip >= base && pExp->ContextRecord->Rip < base + info.SizeOfImage)
+			{
+				std::string module_name;
+				for (DWORD size = 15; module_name.size() != size;)
+				{
+					module_name.resize(size);
+					size = GetModuleBaseNameA(GetCurrentProcess(), module, &module_name.front(), size + 1);
+					if (!size)
+					{
+						module_name.clear();
+						break;
+					}
+				}
+
+				msg += fmt::format("Module name: '%s'.\n", module_name);
+				msg += fmt::format("Module base: %p.\n", info.lpBaseOfDll);
+			}
+		}
+	}
+
+	msg += fmt::format("RPCS3 image base: %p.\n", GetModuleHandle(NULL));
 
 	if (pExp->ExceptionRecord->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION)
 	{
@@ -1208,30 +1452,40 @@ static void signal_handler(int sig, siginfo_t* info, void* uct)
 
 #ifdef __APPLE__
 	const bool is_writing = context->uc_mcontext->__es.__err & 0x2;
+#elif defined(__DragonFly__) || defined(__FreeBSD__)
+	const bool is_writing = context->uc_mcontext.mc_err & 0x2;
+#elif defined(__OpenBSD__)
+	const bool is_writing = context->sc_err & 0x2;
+#elif defined(__NetBSD__)
+	const bool is_writing = context->uc_mcontext.__gregs[_REG_ERR] & 0x2;
 #else
 	const bool is_writing = context->uc_mcontext.gregs[REG_ERR] & 0x2;
 #endif
 
-	const u64 addr64 = (u64)info->si_addr - (u64)vm::base(0);
+	const u64 addr64 = (u64)info->si_addr - (u64)vm::g_base_addr;
+	const u64 exec64 = (u64)info->si_addr - (u64)vm::g_exec_addr;
 	const auto cause = is_writing ? "writing" : "reading";
 
 	if (addr64 < 0x100000000ull)
 	{
-		vm::g_tls_fault_count++;
-
 		// Try to process access violation
-		if (!thread_ctrl::get_current() || !handle_access_violation((u32)addr64, is_writing, context))
+		if (thread_ctrl::get_current() && handle_access_violation((u32)addr64, is_writing, context))
 		{
-			// Setup throw_access_violation() call on the context
-			prepare_throw_access_violation(context, cause, (u32)addr64);
+			return;
 		}
 	}
-	else
+
+	if (exec64 < 0x100000000ull)
 	{
-		// TODO (debugger interaction)
-		report_fatal_error(fmt::format("Access violation %s location %p at %p.", cause, info->si_addr, RIP(context)));
-		std::abort();
+		if (thread_ctrl::get_current() && handle_access_violation((u32)exec64, is_writing, context))
+		{
+			return;
+		}
 	}
+
+	// TODO (debugger interaction)
+	report_fatal_error(fmt::format("Segfault %s location %p at %p.", cause, info->si_addr, RIP(context)));
+	std::abort();
 }
 
 const bool s_exception_handler_set = []() -> bool
@@ -1243,7 +1497,7 @@ const bool s_exception_handler_set = []() -> bool
 
 	if (::sigaction(SIGSEGV, &sa, NULL) == -1)
 	{
-		std::printf("sigaction() failed (0x%x).", errno);
+		std::printf("sigaction(SIGSEGV) failed (0x%x).", errno);
 		std::abort();
 	}
 
@@ -1252,113 +1506,65 @@ const bool s_exception_handler_set = []() -> bool
 
 #endif
 
-const bool s_self_test = []() -> bool
-{
-	// Find ret instruction
-	if ((*(u8*)throw_access_violation & 0xF6) == 0xC2)
-	{
-		std::abort();
-	}
-
-	return true;
-}();
-
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <exception>
-#include <chrono>
-
-thread_local DECLARE(thread_ctrl::g_tls_this_thread) = nullptr;
-
-struct thread_ctrl::internal
-{
-	std::mutex mutex;
-	std::condition_variable cond;
-	std::condition_variable join; // Allows simultaneous joining
-
-	task_stack atexit;
-
-	std::exception_ptr exception; // Caught exception
-
-	std::chrono::high_resolution_clock::time_point time_limit;
-};
-
-thread_local thread_ctrl::internal* g_tls_internal = nullptr;
-
-extern std::mutex& get_current_thread_mutex()
-{
-	return g_tls_internal->mutex;
-}
-
-extern std::condition_variable& get_current_thread_cv()
-{
-	return g_tls_internal->cond;
-}
-
 // TODO
 extern atomic_t<u32> g_thread_count(0);
+
+thread_local DECLARE(thread_ctrl::g_tls_this_thread) = nullptr;
 
 extern thread_local std::string(*g_tls_log_prefix)();
 
 void thread_ctrl::start(const std::shared_ptr<thread_ctrl>& ctrl, task_stack task)
 {
-	reinterpret_cast<std::thread&>(ctrl->m_thread) = std::thread([ctrl, task = std::move(task)]
+#ifdef _WIN32
+	using thread_result = uint;
+	using thread_type = thread_result(__stdcall*)(void* arg);
+#else
+	using thread_result = void*;
+	using thread_type = thread_result(*)(void* arg);
+#endif
+
+	// Thread entry point
+	const thread_type entry = [](void* arg) -> thread_result
 	{
+		// Recover shared_ptr from short-circuited thread_ctrl object pointer
+		const std::shared_ptr<thread_ctrl> ctrl = static_cast<thread_ctrl*>(arg)->m_self;
+
 		try
 		{
 			ctrl->initialize();
-			task.exec();
+			task_stack{std::move(ctrl->m_task)}.invoke();
 		}
 		catch (...)
 		{
-			ctrl->initialize_once();
-			ctrl->m_data->exception = std::current_exception();
+			// Capture exception
+			ctrl->finalize(std::current_exception());
+			return 0;
 		}
 
-		ctrl->finalize();
-	});
-}
+		ctrl->finalize(nullptr);
+		return 0;
+	};
 
-void thread_ctrl::wait_start(u64 timeout)
-{
-	initialize_once();
+	ctrl->m_self = ctrl;
+	ctrl->m_task = std::move(task);
 
-	m_data->time_limit = std::chrono::high_resolution_clock::now() + std::chrono::microseconds(timeout);
-}
+	// TODO: implement simple thread pool
+#ifdef _WIN32
+	std::uintptr_t thread = _beginthreadex(nullptr, 0, entry, ctrl.get(), 0, nullptr);
+	verify("thread_ctrl::start" HERE), thread != 0;
+#else
+	pthread_t thread;
+	verify("thread_ctrl::start" HERE), pthread_create(&thread, nullptr, entry, ctrl.get()) == 0;
+#endif
 
-bool thread_ctrl::wait_wait(u64 timeout)
-{
-	initialize_once();
-
-	std::unique_lock<std::mutex> lock(m_data->mutex, std::adopt_lock);
-
-	if (timeout && m_data->cond.wait_until(lock, m_data->time_limit) == std::cv_status::timeout)
-	{
-		lock.release();
-		return false;
-	}
-
-	m_data->cond.wait(lock);
-	lock.release();
-	return true;
-}
-
-void thread_ctrl::test()
-{
-	if (m_data && m_data->exception)
-	{
-		std::rethrow_exception(m_data->exception);
-	}
+	// TODO: this is unsafe and must be duplicated in thread_ctrl::initialize
+	ctrl->m_thread = (uintptr_t)thread;
 }
 
 void thread_ctrl::initialize()
 {
-	initialize_once(); // TODO (temporarily)
-
 	// Initialize TLS variable
 	g_tls_this_thread = this;
-	g_tls_internal = this->m_data;
 
 	g_tls_log_prefix = []
 	{
@@ -1367,8 +1573,7 @@ void thread_ctrl::initialize()
 
 	++g_thread_count;
 
-#if defined(_MSC_VER)
-
+#ifdef _MSC_VER
 	struct THREADNAME_INFO
 	{
 		DWORD dwType;
@@ -1394,149 +1599,255 @@ void thread_ctrl::initialize()
 		{
 		}
 	}
-
 #endif
 }
 
-void thread_ctrl::finalize() noexcept
+void thread_ctrl::finalize(std::exception_ptr eptr) noexcept
 {
-	// TODO
-	vm::reservation_free();
+	// Run atexit functions
+	m_task.invoke();
+	m_task.reset();
 
-	// Call atexit functions
-	if (m_data) m_data->atexit.exec();
+#ifdef _WIN32
+	ULONG64 cycles{};
+	QueryThreadCycleTime(GetCurrentThread(), &cycles);
+	FILETIME ctime, etime, ktime, utime;
+	GetThreadTimes(GetCurrentThread(), &ctime, &etime, &ktime, &utime);
+	const u64 time = ((ktime.dwLowDateTime | (u64)ktime.dwHighDateTime << 32) + (utime.dwLowDateTime | (u64)utime.dwHighDateTime << 32)) * 100ull;
+#elif defined(RUSAGE_THREAD)
+	const u64 cycles = 0; // Not supported
+	struct ::rusage stats{};
+	::getrusage(RUSAGE_THREAD, &stats);
+	const u64 time = (stats.ru_utime.tv_sec + stats.ru_stime.tv_sec) * 1000000000ull + (stats.ru_utime.tv_usec + stats.ru_stime.tv_usec) * 1000ull;
+#else
+	const u64 cycles = 0;
+	const u64 time = 0;
+#endif
+
+	g_tls_log_prefix = []
+	{
+		return g_tls_this_thread->m_name;
+	};
+
+	LOG_NOTICE(GENERAL, "Thread time: %fs (%fGc); Faults: %u [rsx:%u, spu:%u];",
+		time / 1000000000.,
+		cycles / 1000000000.,
+		g_tls_fault_all,
+		g_tls_fault_rsx,
+		g_tls_fault_spu);
 
 	--g_thread_count;
 
-#ifdef _WIN32
-	ULONG64 time;
-	QueryThreadCycleTime(GetCurrentThread(), &time);
-	LOG_NOTICE(GENERAL, "Thread time: %f Gc", time / 1000000000.);
-#endif
+	// Untangle circular reference, set exception
+	semaphore_lock{m_mutex}, m_self.reset(), m_exception = eptr;
+
+	// Signal joining waiters
+	m_jcv.notify_all();
 }
 
-void thread_ctrl::push_atexit(task_stack task)
+void thread_ctrl::_push(task_stack task)
 {
-	initialize_once();
-	m_data->atexit.push(std::move(task));
+	g_tls_this_thread->m_task.push(std::move(task));
+}
+
+bool thread_ctrl::_wait_for(u64 usec)
+{
+	auto _this = g_tls_this_thread;
+
+	struct half_lock
+	{
+		semaphore<>& ref;
+
+		void lock()
+		{
+			// Used to avoid additional lock + unlock
+		}
+
+		void unlock()
+		{
+			ref.post();
+		}
+	}
+	_lock{_this->m_mutex};
+	
+	do
+	{
+		// Mutex is unlocked at the start and after the waiting
+		if (u32 sig = _this->m_signal.load())
+		{
+			thread_ctrl::test();
+
+			if (sig & 1)
+			{
+				_this->m_signal &= ~1;
+				return true;
+			}
+		}
+
+		if (usec == 0)
+		{
+			// No timeout: return immediately
+			return false;
+		}
+
+		// Lock (semaphore)
+		_this->m_mutex.wait();
+
+		// Double-check the value
+		if (u32 sig = _this->m_signal.load())
+		{
+			if (sig & 2 && _this->m_exception)
+			{
+				_this->_throw();
+			}
+
+			if (sig & 1)
+			{
+				_this->m_signal &= ~1;
+				_this->m_mutex.post();
+				return true;
+			}
+		}
+	}
+	while (_this->m_cond.wait(_lock, std::exchange(usec, usec == -1 ? -1 : 0)));
+
+	// Timeout
+	return false;
+}
+
+[[noreturn]] void thread_ctrl::_throw()
+{
+	std::exception_ptr ex = std::exchange(m_exception, std::exception_ptr{});
+	m_signal &= ~3;
+	m_mutex.post();
+	std::rethrow_exception(std::move(ex));
+}
+
+void thread_ctrl::_notify(cond_variable thread_ctrl::* ptr)
+{
+	// Optimized lock + unlock
+	if (!m_mutex.get())
+	{
+		m_mutex.wait();
+		m_mutex.post();
+	}
+
+	(this->*ptr).notify_one();
 }
 
 thread_ctrl::thread_ctrl(std::string&& name)
 	: m_name(std::move(name))
 {
-	CHECK_STORAGE(std::thread, m_thread);
-
-#pragma push_macro("new")
-#undef new
-	new (&m_thread) std::thread;
-#pragma pop_macro("new")
 }
 
 thread_ctrl::~thread_ctrl()
 {
-	if (reinterpret_cast<std::thread&>(m_thread).joinable())
+	if (m_thread)
 	{
-		reinterpret_cast<std::thread&>(m_thread).detach();
+#ifdef _WIN32
+		CloseHandle((HANDLE)m_thread.raw());
+#else
+		pthread_detach((pthread_t)m_thread.raw());
+#endif
 	}
-
-	delete m_data;
-
-	reinterpret_cast<std::thread&>(m_thread).~thread();
 }
 
-void thread_ctrl::initialize_once()
+std::exception_ptr thread_ctrl::get_exception() const
 {
-	if (UNLIKELY(!m_data))
-	{
-		auto ptr = new thread_ctrl::internal;
+	semaphore_lock lock(m_mutex);
+	return m_exception;
+}
 
-		if (!m_data.compare_and_swap_test(nullptr, ptr))
-		{
-			delete ptr;
-		}
+void thread_ctrl::set_exception(std::exception_ptr ptr)
+{
+	semaphore_lock lock(m_mutex);
+	m_exception = ptr;
+
+	if (m_exception)
+	{
+		m_signal |= 2;
+		m_cond.notify_one();
+	}
+	else
+	{
+		m_signal &= ~2;
 	}
 }
 
 void thread_ctrl::join()
 {
-	// Increase contention counter
-	const u32 _j = m_joining++;
+#ifdef _WIN32
+	//verify("thread_ctrl::join" HERE), WaitForSingleObjectEx((HANDLE)m_thread.load(), -1, false) == WAIT_OBJECT_0;
+#endif
 
-	if (LIKELY(_j >= 0x80000000))
+	semaphore_lock lock(m_mutex);
+
+	while (m_self)
 	{
-		// Already joined (signal condition)
-		m_joining = 0x80000000;
-	}
-	else if (LIKELY(_j == 0))
-	{
-		// Winner joins the thread
-		reinterpret_cast<std::thread&>(m_thread).join();
-
-		// Notify others if necessary
-		if (UNLIKELY(m_joining.exchange(0x80000000) != 1))
-		{
-			initialize_once();
-
-			// Serialize for reliable notification
-			m_data->mutex.lock();
-			m_data->mutex.unlock();
-			m_data->join.notify_all();
-		}
-	}
-	else
-	{
-		// Hard way
-		initialize_once();
-
-		std::unique_lock<std::mutex> lock(m_data->mutex);
-		m_data->join.wait(lock, WRAP_EXPR(m_joining >= 0x80000000));
+		m_jcv.wait(lock);
 	}
 
-	if (UNLIKELY(m_data && m_data->exception))
+	if (UNLIKELY(m_exception && !std::uncaught_exception()))
 	{
-		std::rethrow_exception(m_data->exception);
+		std::rethrow_exception(m_exception);
 	}
-}
-
-void thread_ctrl::lock()
-{
-	initialize_once();
-	m_data->mutex.lock();
-}
-
-void thread_ctrl::unlock()
-{
-	m_data->mutex.unlock();
-}
-
-void thread_ctrl::lock_notify()
-{
-	if (UNLIKELY(g_tls_this_thread == this))
-	{
-		return;
-	}
-
-	initialize_once();
-
-	// Serialize for reliable notification, condition is assumed to be changed externally
-	m_data->mutex.lock();
-	m_data->mutex.unlock();
-	m_data->cond.notify_one();
 }
 
 void thread_ctrl::notify()
 {
-	m_data->cond.notify_one();
+	if (!(m_signal & 1))
+	{
+		m_signal |= 1;
+		_notify(&thread_ctrl::m_cond);
+	}
 }
 
-void thread_ctrl::set_exception(std::exception_ptr e)
+void thread_ctrl::test()
 {
-	m_data->exception = e;
+	const auto _this = g_tls_this_thread;
+
+	if (_this->m_signal & 2)
+	{
+		_this->m_mutex.wait();
+
+		if (_this->m_exception)
+		{
+			_this->_throw();
+		}
+
+		_this->m_mutex.post();
+	}
 }
 
-void thread_ctrl::sleep(u64 useconds)
+void thread_ctrl::set_native_priority(int priority)
 {
-	std::this_thread::sleep_for(std::chrono::microseconds(useconds));
+#ifdef _WIN32
+	HANDLE _this_thread = GetCurrentThread();
+	INT native_priority = THREAD_PRIORITY_NORMAL;
+
+	switch (priority)
+	{
+	default:
+	case 0:
+		break;
+	case 1:
+		native_priority = THREAD_PRIORITY_ABOVE_NORMAL;
+		break;
+	case -1:
+		native_priority = THREAD_PRIORITY_BELOW_NORMAL;
+		break;
+	}
+
+	SetThreadPriority(_this_thread, native_priority);
+#endif
+}
+
+void thread_ctrl::set_ideal_processor_core(int core)
+{
+#ifdef _WIN32
+	HANDLE _this_thread = GetCurrentThread();
+	SetThreadIdealProcessor(_this_thread, core);
+#endif
 }
 
 
@@ -1553,18 +1864,19 @@ std::string named_thread::get_name() const
 	return fmt::format("('%s') Unnamed Thread", typeid(*this).name());
 }
 
-void named_thread::start()
+void named_thread::start_thread(const std::shared_ptr<void>& _this)
 {
-	// Get shared_ptr instance (will throw if called from the constructor or the object has been created incorrectly)
-	auto&& ptr = shared_from_this();
+	// Ensure it's not called from the constructor and the correct object is passed
+	verify("named_thread::start_thread" HERE), _this.get() == this;
 
 	// Run thread
-	m_thread = thread_ctrl::spawn(get_name(), [thread = std::move(ptr)]()
+	thread_ctrl::spawn(m_thread, get_name(), [this, _this]()
 	{
 		try
 		{
 			LOG_TRACE(GENERAL, "Thread started");
-			thread->on_task();
+			on_spawn();
+			on_task();
 			LOG_TRACE(GENERAL, "Thread ended");
 		}
 		catch (const std::exception& e)
@@ -1572,11 +1884,11 @@ void named_thread::start()
 			LOG_FATAL(GENERAL, "%s thrown: %s", typeid(e).name(), e.what());
 			Emu.Pause();
 		}
-		catch (EmulationStopped)
-		{
-			LOG_NOTICE(GENERAL, "Thread aborted");
-		}
 
-		thread->on_exit();
+		on_exit();
 	});
+}
+
+task_stack::task_base::~task_base()
+{
 }

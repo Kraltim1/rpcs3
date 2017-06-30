@@ -14,7 +14,6 @@ namespace vk
 
 		program::~program()
 		{
-			LOG_ERROR(RSX, "Program destructor invoked!");
 			vkDestroyPipeline(m_device, pipeline, nullptr);
 		}
 
@@ -65,7 +64,7 @@ namespace vk
 				}
 			}
 
-			throw EXCEPTION("texture not found");
+			LOG_NOTICE(RSX, "texture not found in program: %s", uniform_name.c_str());
 		}
 
 		void program::bind_uniform(VkDescriptorBufferInfo buffer_descriptor, uint32_t binding_point, VkDescriptorSet &descriptor_set)
@@ -101,7 +100,8 @@ namespace vk
 					return;
 				}
 			}
-			throw EXCEPTION("vertex buffer not found");
+			
+			LOG_NOTICE(RSX, "vertex buffer not found in program: %s", binding_name.c_str());
 		}
 	}
 }

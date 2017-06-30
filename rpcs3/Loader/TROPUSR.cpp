@@ -1,5 +1,7 @@
 #include "stdafx.h"
+#include "restore_new.h"
 #include "Utilities/rXml.h"
+#include "define_new_memleakdetect.h"
 #include "Emu/System.h"
 #include "TROPUSR.h"
 
@@ -138,7 +140,7 @@ bool TROPUSRLoader::Generate(const std::string& filepath, const std::string& con
 	const std::string& path = vfs::get(configpath);
 
 	// TODO: rXmlDocument can open only real file
-	VERIFY(!fs::get_virtual_device(path));
+	verify(HERE), !fs::get_virtual_device(path);
 	rXmlDocument doc;
 	doc.Load(path);
 

@@ -539,7 +539,7 @@ struct alignas(128) CellSpurs
 	atomic_t<u8> handlerExiting;                        // 0xD66
 	atomic_be_t<u32> enableEH;                          // 0xD68
 	be_t<u32> exception;                                // 0xD6C
-	sys_spu_image_t spuImg;                             // 0xD70
+	sys_spu_image spuImg;                               // 0xD70
 	be_t<u32> flags;                                    // 0xD80
 	be_t<s32> spuPriority;                              // 0xD84
 	be_t<u32> ppuPriority;                              // 0xD88
@@ -562,7 +562,7 @@ struct alignas(128) CellSpurs
 	_sub_str4 wklH2[0x10];                              // 0x1A00
 	u8 unknown_[0x2000 - 0x1B00];
 
-	force_inline atomic_t<u8>& wklState(const u32 wid)
+	atomic_t<u8>& wklState(const u32 wid)
 	{
 		if (wid & 0x10)
 		{

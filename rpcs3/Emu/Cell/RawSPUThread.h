@@ -7,14 +7,11 @@ class RawSPUThread final : public SPUThread
 	void cpu_task() override;
 
 public:
-	/* IdManager setups */
+	static const u32 id_base = 0;
+	static const u32 id_step = 1;
+	static const u32 id_count = 5;
 
-	using id_base = RawSPUThread;
-
-	static constexpr u32 id_min = 0;
-	static constexpr u32 id_max = 4;
-
-	void on_init() override;
+	void on_init(const std::shared_ptr<void>&) override;
 
 	RawSPUThread(const std::string& name);
 

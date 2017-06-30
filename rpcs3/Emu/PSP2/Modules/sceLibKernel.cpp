@@ -11,46 +11,494 @@
 
 #include <algorithm>
 
-logs::channel sceLibKernel("sceLibKernel", logs::level::notice);
+logs::channel sceLibKernel("sceLibKernel");
 
 extern u64 get_system_time();
 
+template<>
+void fmt_class_string<SceError>::format(std::string& out, u64 arg)
+{
+	format_enum(out, arg, [](auto error)
+	{
+		switch (error)
+		{
+		STR_CASE(SCE_ERROR_ERRNO_EPERM);
+		STR_CASE(SCE_ERROR_ERRNO_ENOENT);
+		STR_CASE(SCE_ERROR_ERRNO_ESRCH);
+		STR_CASE(SCE_ERROR_ERRNO_EINTR);
+		STR_CASE(SCE_ERROR_ERRNO_EIO);
+		STR_CASE(SCE_ERROR_ERRNO_ENXIO);
+		STR_CASE(SCE_ERROR_ERRNO_E2BIG);
+		STR_CASE(SCE_ERROR_ERRNO_ENOEXEC);
+		STR_CASE(SCE_ERROR_ERRNO_EBADF);
+		STR_CASE(SCE_ERROR_ERRNO_ECHILD);
+		STR_CASE(SCE_ERROR_ERRNO_EAGAIN);
+		STR_CASE(SCE_ERROR_ERRNO_ENOMEM);
+		STR_CASE(SCE_ERROR_ERRNO_EACCES);
+		STR_CASE(SCE_ERROR_ERRNO_EFAULT);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTBLK);
+		STR_CASE(SCE_ERROR_ERRNO_EBUSY);
+		STR_CASE(SCE_ERROR_ERRNO_EEXIST);
+		STR_CASE(SCE_ERROR_ERRNO_EXDEV);
+		STR_CASE(SCE_ERROR_ERRNO_ENODEV);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTDIR);
+		STR_CASE(SCE_ERROR_ERRNO_EISDIR);
+		STR_CASE(SCE_ERROR_ERRNO_EINVAL);
+		STR_CASE(SCE_ERROR_ERRNO_ENFILE);
+		STR_CASE(SCE_ERROR_ERRNO_EMFILE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTTY);
+		STR_CASE(SCE_ERROR_ERRNO_ETXTBSY);
+		STR_CASE(SCE_ERROR_ERRNO_EFBIG);
+		STR_CASE(SCE_ERROR_ERRNO_ENOSPC);
+		STR_CASE(SCE_ERROR_ERRNO_ESPIPE);
+		STR_CASE(SCE_ERROR_ERRNO_EROFS);
+		STR_CASE(SCE_ERROR_ERRNO_EMLINK);
+		STR_CASE(SCE_ERROR_ERRNO_EPIPE);
+		STR_CASE(SCE_ERROR_ERRNO_EDOM);
+		STR_CASE(SCE_ERROR_ERRNO_ERANGE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOMSG);
+		STR_CASE(SCE_ERROR_ERRNO_EIDRM);
+		STR_CASE(SCE_ERROR_ERRNO_ECHRNG);
+		STR_CASE(SCE_ERROR_ERRNO_EL2NSYNC);
+		STR_CASE(SCE_ERROR_ERRNO_EL3HLT);
+		STR_CASE(SCE_ERROR_ERRNO_EL3RST);
+		STR_CASE(SCE_ERROR_ERRNO_ELNRNG);
+		STR_CASE(SCE_ERROR_ERRNO_EUNATCH);
+		STR_CASE(SCE_ERROR_ERRNO_ENOCSI);
+		STR_CASE(SCE_ERROR_ERRNO_EL2HLT);
+		STR_CASE(SCE_ERROR_ERRNO_EDEADLK);
+		STR_CASE(SCE_ERROR_ERRNO_ENOLCK);
+		STR_CASE(SCE_ERROR_ERRNO_EFORMAT);
+		STR_CASE(SCE_ERROR_ERRNO_EUNSUP);
+		STR_CASE(SCE_ERROR_ERRNO_EBADE);
+		STR_CASE(SCE_ERROR_ERRNO_EBADR);
+		STR_CASE(SCE_ERROR_ERRNO_EXFULL);
+		STR_CASE(SCE_ERROR_ERRNO_ENOANO);
+		STR_CASE(SCE_ERROR_ERRNO_EBADRQC);
+		STR_CASE(SCE_ERROR_ERRNO_EBADSLT);
+		STR_CASE(SCE_ERROR_ERRNO_EDEADLOCK);
+		STR_CASE(SCE_ERROR_ERRNO_EBFONT);
+		STR_CASE(SCE_ERROR_ERRNO_ENOSTR);
+		STR_CASE(SCE_ERROR_ERRNO_ENODATA);
+		STR_CASE(SCE_ERROR_ERRNO_ETIME);
+		STR_CASE(SCE_ERROR_ERRNO_ENOSR);
+		STR_CASE(SCE_ERROR_ERRNO_ENONET);
+		STR_CASE(SCE_ERROR_ERRNO_ENOPKG);
+		STR_CASE(SCE_ERROR_ERRNO_EREMOTE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOLINK);
+		STR_CASE(SCE_ERROR_ERRNO_EADV);
+		STR_CASE(SCE_ERROR_ERRNO_ESRMNT);
+		STR_CASE(SCE_ERROR_ERRNO_ECOMM);
+		STR_CASE(SCE_ERROR_ERRNO_EPROTO);
+		STR_CASE(SCE_ERROR_ERRNO_EMULTIHOP);
+		STR_CASE(SCE_ERROR_ERRNO_ELBIN);
+		STR_CASE(SCE_ERROR_ERRNO_EDOTDOT);
+		STR_CASE(SCE_ERROR_ERRNO_EBADMSG);
+		STR_CASE(SCE_ERROR_ERRNO_EFTYPE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTUNIQ);
+		STR_CASE(SCE_ERROR_ERRNO_EBADFD);
+		STR_CASE(SCE_ERROR_ERRNO_EREMCHG);
+		STR_CASE(SCE_ERROR_ERRNO_ELIBACC);
+		STR_CASE(SCE_ERROR_ERRNO_ELIBBAD);
+		STR_CASE(SCE_ERROR_ERRNO_ELIBSCN);
+		STR_CASE(SCE_ERROR_ERRNO_ELIBMAX);
+		STR_CASE(SCE_ERROR_ERRNO_ELIBEXEC);
+		STR_CASE(SCE_ERROR_ERRNO_ENOSYS);
+		STR_CASE(SCE_ERROR_ERRNO_ENMFILE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTEMPTY);
+		STR_CASE(SCE_ERROR_ERRNO_ENAMETOOLONG);
+		STR_CASE(SCE_ERROR_ERRNO_ELOOP);
+		STR_CASE(SCE_ERROR_ERRNO_EOPNOTSUPP);
+		STR_CASE(SCE_ERROR_ERRNO_EPFNOSUPPORT);
+		STR_CASE(SCE_ERROR_ERRNO_ECONNRESET);
+		STR_CASE(SCE_ERROR_ERRNO_ENOBUFS);
+		STR_CASE(SCE_ERROR_ERRNO_EAFNOSUPPORT);
+		STR_CASE(SCE_ERROR_ERRNO_EPROTOTYPE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTSOCK);
+		STR_CASE(SCE_ERROR_ERRNO_ENOPROTOOPT);
+		STR_CASE(SCE_ERROR_ERRNO_ESHUTDOWN);
+		STR_CASE(SCE_ERROR_ERRNO_ECONNREFUSED);
+		STR_CASE(SCE_ERROR_ERRNO_EADDRINUSE);
+		STR_CASE(SCE_ERROR_ERRNO_ECONNABORTED);
+		STR_CASE(SCE_ERROR_ERRNO_ENETUNREACH);
+		STR_CASE(SCE_ERROR_ERRNO_ENETDOWN);
+		STR_CASE(SCE_ERROR_ERRNO_ETIMEDOUT);
+		STR_CASE(SCE_ERROR_ERRNO_EHOSTDOWN);
+		STR_CASE(SCE_ERROR_ERRNO_EHOSTUNREACH);
+		STR_CASE(SCE_ERROR_ERRNO_EINPROGRESS);
+		STR_CASE(SCE_ERROR_ERRNO_EALREADY);
+		STR_CASE(SCE_ERROR_ERRNO_EDESTADDRREQ);
+		STR_CASE(SCE_ERROR_ERRNO_EMSGSIZE);
+		STR_CASE(SCE_ERROR_ERRNO_EPROTONOSUPPORT);
+		STR_CASE(SCE_ERROR_ERRNO_ESOCKTNOSUPPORT);
+		STR_CASE(SCE_ERROR_ERRNO_EADDRNOTAVAIL);
+		STR_CASE(SCE_ERROR_ERRNO_ENETRESET);
+		STR_CASE(SCE_ERROR_ERRNO_EISCONN);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTCONN);
+		STR_CASE(SCE_ERROR_ERRNO_ETOOMANYREFS);
+		STR_CASE(SCE_ERROR_ERRNO_EPROCLIM);
+		STR_CASE(SCE_ERROR_ERRNO_EUSERS);
+		STR_CASE(SCE_ERROR_ERRNO_EDQUOT);
+		STR_CASE(SCE_ERROR_ERRNO_ESTALE);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTSUP);
+		STR_CASE(SCE_ERROR_ERRNO_ENOMEDIUM);
+		STR_CASE(SCE_ERROR_ERRNO_ENOSHARE);
+		STR_CASE(SCE_ERROR_ERRNO_ECASECLASH);
+		STR_CASE(SCE_ERROR_ERRNO_EILSEQ);
+		STR_CASE(SCE_ERROR_ERRNO_EOVERFLOW);
+		STR_CASE(SCE_ERROR_ERRNO_ECANCELED);
+		STR_CASE(SCE_ERROR_ERRNO_ENOTRECOVERABLE);
+		STR_CASE(SCE_ERROR_ERRNO_EOWNERDEAD);
+		}
+
+		return unknown;
+	});
+}
+
+template<>
+void fmt_class_string<SceLibKernelError>::format(std::string& out, u64 arg)
+{
+	format_enum(out, arg, [](auto error)
+	{
+		switch (error)
+		{
+		STR_CASE(SCE_KERNEL_ERROR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_IMPLEMENTED);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_ARGUMENT);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_ARGUMENT_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_FLAGS);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_ADDR);
+		STR_CASE(SCE_KERNEL_ERROR_UNSUP);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_MODE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_ALIGNMENT);
+		STR_CASE(SCE_KERNEL_ERROR_NOSYS);
+		STR_CASE(SCE_KERNEL_ERROR_DEBUG_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_DIPSW_NUMBER);
+		STR_CASE(SCE_KERNEL_ERROR_CPU_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_MMU_ILLEGAL_L1_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_MMU_L2_INDEX_OVERFLOW);
+		STR_CASE(SCE_KERNEL_ERROR_MMU_L2_SIZE_OVERFLOW);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_CPU_AFFINITY);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_MEMORY_ACCESS);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_MEMORY_ACCESS_PERMISSION);
+		STR_CASE(SCE_KERNEL_ERROR_VA2PA_FAULT);
+		STR_CASE(SCE_KERNEL_ERROR_VA2PA_MAPPED);
+		STR_CASE(SCE_KERNEL_ERROR_VALIDATION_CHECK_FAILED);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_PROCESS_CONTEXT);
+		STR_CASE(SCE_KERNEL_ERROR_UID_NAME_TOO_LONG);
+		STR_CASE(SCE_KERNEL_ERROR_VARANGE_IS_NOT_PHYSICAL_CONTINUOUS);
+		STR_CASE(SCE_KERNEL_ERROR_PHYADDR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_NO_PHYADDR);
+		STR_CASE(SCE_KERNEL_ERROR_PHYADDR_USED);
+		STR_CASE(SCE_KERNEL_ERROR_PHYADDR_NOT_USED);
+		STR_CASE(SCE_KERNEL_ERROR_NO_IOADDR);
+		STR_CASE(SCE_KERNEL_ERROR_PHYMEM_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_PHYPAGE_STATUS);
+		STR_CASE(SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE);
+		STR_CASE(SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE_UNIT);
+		STR_CASE(SCE_KERNEL_ERROR_PHYMEMPART_NOT_EMPTY);
+		STR_CASE(SCE_KERNEL_ERROR_NO_PHYMEMPART_LPDDR2);
+		STR_CASE(SCE_KERNEL_ERROR_NO_PHYMEMPART_CDRAM);
+		STR_CASE(SCE_KERNEL_ERROR_FIXEDHEAP_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_FIXEDHEAP_ILLEGAL_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_FIXEDHEAP_ILLEGAL_INDEX);
+		STR_CASE(SCE_KERNEL_ERROR_FIXEDHEAP_INDEX_OVERFLOW);
+		STR_CASE(SCE_KERNEL_ERROR_FIXEDHEAP_NO_CHUNK);
+		STR_CASE(SCE_KERNEL_ERROR_UID_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_UID);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_UID_INVALID_ARGUMENT);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_INVALID_UID_RANGE);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_NO_VALID_UID);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_CANNOT_ALLOCATE_UIDENTRY);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_PROCESS_UID);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_KERNEL_UID);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_UID_CLASS);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_UID_SUBCLASS);
+		STR_CASE(SCE_KERNEL_ERROR_UID_CANNOT_FIND_BY_NAME);
+		STR_CASE(SCE_KERNEL_ERROR_VIRPAGE_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_VIRPAGE_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_BLOCK_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_BLOCK_ID);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_BLOCK_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_BLOCK_IN_USE);
+		STR_CASE(SCE_KERNEL_ERROR_PARTITION_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_PARTITION_ID);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_PARTITION_INDEX);
+		STR_CASE(SCE_KERNEL_ERROR_NO_L2PAGETABLE);
+		STR_CASE(SCE_KERNEL_ERROR_HEAPLIB_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_HEAP_ID);
+		STR_CASE(SCE_KERNEL_ERROR_OUT_OF_RANG);
+		STR_CASE(SCE_KERNEL_ERROR_HEAPLIB_NOMEM);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_ADDRESS_SPACE_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_ADDRESS_SPACE_ID);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_PARTITION_INDEX);
+		STR_CASE(SCE_KERNEL_ERROR_ADDRESS_SPACE_CANNOT_FIND_PARTITION_BY_ADDR);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_MEMBLOCK_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCK_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCK_REMAP_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_PHY_CONT_MEMBLOCK);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCK_CODE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCK_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_USERMAP_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_MEMBLOCK_TYPE_FOR_KERNEL_PROCESS);
+		STR_CASE(SCE_KERNEL_ERROR_PROCESS_CANNOT_REMAP_MEMBLOCK);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_PHYMEMLOW_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_CANNOT_ALLOC_PHYMEMLOW);
+		STR_CASE(SCE_KERNEL_ERROR_UNKNOWN_PHYMEMLOW_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_SYSMEM_BITHEAP_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_CANNOT_ALLOC_BITHEAP);
+		STR_CASE(SCE_KERNEL_ERROR_LOADCORE_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_ELF_HEADER);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_SELF_HEADER);
+		STR_CASE(SCE_KERNEL_ERROR_EXCPMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_EXCPCODE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_EXCPHANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_NOTFOUND_EXCPHANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_CANNOT_RELEASE_EXCPHANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_INTRMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_CONTEXT);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_INTRCODE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_INTRPARAM);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_INTRPRIORITY);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_TARGET_CPU);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_INTRFILTER);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_INTRTYPE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_HANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_FOUND_HANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_NOTFOUND_HANDLER);
+		STR_CASE(SCE_KERNEL_ERROR_NO_MEMORY);
+		STR_CASE(SCE_KERNEL_ERROR_DMACMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_ALREADY_QUEUED);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_QUEUED);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_SETUP);
+		STR_CASE(SCE_KERNEL_ERROR_ON_TRANSFERRING);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_INITIALIZED);
+		STR_CASE(SCE_KERNEL_ERROR_TRANSFERRED);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_UNDER_CONTROL);
+		STR_CASE(SCE_KERNEL_ERROR_SYSTIMER_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_NO_FREE_TIMER);
+		STR_CASE(SCE_KERNEL_ERROR_TIMER_NOT_ALLOCATED);
+		STR_CASE(SCE_KERNEL_ERROR_TIMER_COUNTING);
+		STR_CASE(SCE_KERNEL_ERROR_TIMER_STOPPED);
+		STR_CASE(SCE_KERNEL_ERROR_THREADMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_DORMANT);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_DORMANT);
+		STR_CASE(SCE_KERNEL_ERROR_UNKNOWN_THID);
+		STR_CASE(SCE_KERNEL_ERROR_CAN_NOT_WAIT);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_THID);
+		STR_CASE(SCE_KERNEL_ERROR_THREAD_TERMINATED);
+		STR_CASE(SCE_KERNEL_ERROR_DELETED);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
+		STR_CASE(SCE_KERNEL_ERROR_NOTIFY_CALLBACK);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_DELETE);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_ATTR);
+		STR_CASE(SCE_KERNEL_ERROR_EVF_MULTI);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_CANCEL);
+		STR_CASE(SCE_KERNEL_ERROR_EVF_COND);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_COUNT);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_PRIORITY);
+		STR_CASE(SCE_KERNEL_ERROR_MUTEX_RECURSIVE);
+		STR_CASE(SCE_KERNEL_ERROR_MUTEX_LOCK_OVF);
+		STR_CASE(SCE_KERNEL_ERROR_MUTEX_NOT_OWNED);
+		STR_CASE(SCE_KERNEL_ERROR_MUTEX_UNLOCK_UDF);
+		STR_CASE(SCE_KERNEL_ERROR_MUTEX_FAILED_TO_OWN);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_RECURSIVE);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_LOCK_OVF);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_FAILED_TO_OWN);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_NOT_OWNED);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_OWNED);
+		STR_CASE(SCE_KERNEL_ERROR_ALARM_CAN_NOT_CANCEL);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_OBJECT_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_KERNEL_TLS_FULL);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_KERNEL_TLS_INDEX);
+		STR_CASE(SCE_KERNEL_ERROR_KERNEL_TLS_BUSY);
+		STR_CASE(SCE_KERNEL_ERROR_DIFFERENT_UID_CLASS);
+		STR_CASE(SCE_KERNEL_ERROR_UNKNOWN_UID);
+		STR_CASE(SCE_KERNEL_ERROR_SEMA_ZERO);
+		STR_CASE(SCE_KERNEL_ERROR_SEMA_OVF);
+		STR_CASE(SCE_KERNEL_ERROR_PMON_NOT_THREAD_MODE);
+		STR_CASE(SCE_KERNEL_ERROR_PMON_NOT_CPU_MODE);
+		STR_CASE(SCE_KERNEL_ERROR_ALREADY_REGISTERED);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_THREAD_ID);
+		STR_CASE(SCE_KERNEL_ERROR_ALREADY_DEBUG_SUSPENDED);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_DEBUG_SUSPENDED);
+		STR_CASE(SCE_KERNEL_ERROR_CAN_NOT_USE_VFP);
+		STR_CASE(SCE_KERNEL_ERROR_RUNNING);
+		STR_CASE(SCE_KERNEL_ERROR_EVENT_COND);
+		STR_CASE(SCE_KERNEL_ERROR_MSG_PIPE_FULL);
+		STR_CASE(SCE_KERNEL_ERROR_MSG_PIPE_EMPTY);
+		STR_CASE(SCE_KERNEL_ERROR_ALREADY_SENT);
+		STR_CASE(SCE_KERNEL_ERROR_CAN_NOT_SUSPEND);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_ALREADY_INITIALIZED);
+		STR_CASE(SCE_KERNEL_ERROR_FAST_MUTEX_NOT_INITIALIZED);
+		STR_CASE(SCE_KERNEL_ERROR_THREAD_STOPPED);
+		STR_CASE(SCE_KERNEL_ERROR_THREAD_SUSPENDED);
+		STR_CASE(SCE_KERNEL_ERROR_NOT_SUSPENDED);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_DELETE_MUTEX);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_CANCEL_MUTEX);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_DELETE_COND);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_CANCEL_COND);
+		STR_CASE(SCE_KERNEL_ERROR_LW_MUTEX_NOT_OWNED);
+		STR_CASE(SCE_KERNEL_ERROR_LW_MUTEX_LOCK_OVF);
+		STR_CASE(SCE_KERNEL_ERROR_LW_MUTEX_UNLOCK_UDF);
+		STR_CASE(SCE_KERNEL_ERROR_LW_MUTEX_RECURSIVE);
+		STR_CASE(SCE_KERNEL_ERROR_LW_MUTEX_FAILED_TO_OWN);
+		STR_CASE(SCE_KERNEL_ERROR_WAIT_DELETE_LW_MUTEX);
+		STR_CASE(SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_RECURSIVE);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_LOCK_OVF);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_NOT_OWNED);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_UNLOCK_UDF);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_FAILED_TO_LOCK);
+		STR_CASE(SCE_KERNEL_ERROR_RW_LOCK_FAILED_TO_UNLOCK);
+		STR_CASE(SCE_KERNEL_ERROR_PROCESSMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_PID);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_PROCESS_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_PLS_FULL);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_PROCESS_STATUS);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_BUDGET_ID);
+		STR_CASE(SCE_KERNEL_ERROR_INVALID_BUDGET_SIZE);
+		STR_CASE(SCE_KERNEL_ERROR_CP14_DISABLED);
+		STR_CASE(SCE_KERNEL_ERROR_EXCEEDED_MAX_PROCESSES);
+		STR_CASE(SCE_KERNEL_ERROR_PROCESS_REMAINING);
+		STR_CASE(SCE_KERNEL_ERROR_IOFILEMGR_ERROR);
+		STR_CASE(SCE_KERNEL_ERROR_IO_NAME_TOO_LONG);
+		STR_CASE(SCE_KERNEL_ERROR_IO_REG_DEV);
+		STR_CASE(SCE_KERNEL_ERROR_IO_ALIAS_USED);
+		STR_CASE(SCE_KERNEL_ERROR_IO_DEL_DEV);
+		STR_CASE(SCE_KERNEL_ERROR_IO_WOULD_BLOCK);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_START_FAILED);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_STOP_FAIL);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_IN_USE);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_LIB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_SYSCALL_REG);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOMEM_LIB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOMEM_STUB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOMEM_SELF);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOMEM);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_LIB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_STUB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_FUNC_NID);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_VAR_NID);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_TYPE);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_MOD_ENTRY);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_PROC_PARAM);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_MODOBJ);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_MOD);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NO_PROCESS);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_OLD_LIB);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_STARTED);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOT_STARTED);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOT_STOPPED);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_PROCESS_UID);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_CANNOT_EXPORT_LIB_TO_SHARED);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_REL_INFO);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_INVALID_REF_INFO);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_ELINK);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOENT);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_BUSY);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NOEXEC);
+		STR_CASE(SCE_KERNEL_ERROR_MODULEMGR_NAMETOOLONG);
+		STR_CASE(SCE_KERNEL_ERROR_LIBRARYDB_NOENT);
+		STR_CASE(SCE_KERNEL_ERROR_LIBRARYDB_NO_LIB);
+		STR_CASE(SCE_KERNEL_ERROR_LIBRARYDB_NO_MOD);
+		STR_CASE(SCE_KERNEL_ERROR_AUTHFAIL);
+		STR_CASE(SCE_KERNEL_ERROR_NO_AUTH);
+		}
+
+		return unknown;
+	});
+}
+
+arm_tls_manager::arm_tls_manager(u32 vaddr, u32 fsize, u32 vsize)
+	: vaddr(vaddr)
+	, fsize(fsize)
+	, vsize(vsize)
+	, start(vsize ? vm::alloc(vsize * ::size32(m_map), vm::main) : 0)
+{
+}
+
+u32 arm_tls_manager::alloc()
+{
+	if (!vsize)
+	{
+		return 0;
+	}
+
+	for (u32 i = 0; i < m_map.size(); i++)
+	{
+		if (!m_map[i] && m_map[i].exchange(true) == false)
+		{
+			const u32 addr = start + i * vsize; // Get TLS address
+			std::memcpy(vm::base(addr), vm::base(vaddr), fsize); // Initialize from TLS image
+			std::memset(vm::base(addr + fsize), 0, vsize - fsize); // Fill the rest with zeros
+			return addr;
+		}
+	}
+
+	sceLibKernel.error("arm_tls_manager::alloc(): out of TLS memory (max=%zu)", m_map.size());
+	return 0;
+}
+
+void arm_tls_manager::dealloc(u32 addr)
+{
+	if (!addr)
+	{
+		return;
+	}
+
+	// Calculate TLS index
+	const u32 i = (addr - start) / vsize;
+
+	if (addr < start || i >= m_map.size() || (addr - start) % vsize)
+	{
+		sceLibKernel.error("arm_tls_manager::free(0x%x): invalid address", addr);
+		return;
+	}
+
+	if (m_map[i].exchange(false) == false)
+	{
+		sceLibKernel.error("arm_tls_manager::free(0x%x): deallocation failed", addr);
+		return;
+	}
+}
+
 s32 sceKernelAllocMemBlock(vm::cptr<char> name, s32 type, u32 vsize, vm::ptr<SceKernelAllocMemBlockOpt> pOpt)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelFreeMemBlock(s32 uid)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetMemBlockBase(s32 uid, vm::pptr<void> ppBase)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetMemBlockInfoByAddr(vm::ptr<void> vbase, vm::ptr<SceKernelMemBlockInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
-arm_error_code sceKernelCreateThread(vm::cptr<char> pName, vm::ptr<SceKernelThreadEntry> entry, s32 initPriority, u32 stackSize, u32 attr, s32 cpuAffinityMask, vm::cptr<SceKernelThreadOptParam> pOptParam)
+error_code sceKernelCreateThread(vm::cptr<char> pName, vm::ptr<SceKernelThreadEntry> entry, s32 initPriority, u32 stackSize, u32 attr, s32 cpuAffinityMask, vm::cptr<SceKernelThreadOptParam> pOptParam)
 {
-	sceLibKernel.warning("sceKernelCreateThread(pName=*0x%x, entry=*0x%x, initPriority=%d, stackSize=0x%x, attr=0x%x, cpuAffinityMask=0x%x, pOptParam=*0x%x)",
+	sceLibKernel.warning("sceKernelCreateThread(pName=%s, entry=*0x%x, initPriority=%d, stackSize=0x%x, attr=0x%x, cpuAffinityMask=0x%x, pOptParam=*0x%x)",
 		pName, entry, initPriority, stackSize, attr, cpuAffinityMask, pOptParam);
 
-	const auto thread = idm::make_ptr<ARMv7Thread>(pName.get_ptr());
+	const auto thread = idm::make_ptr<ARMv7Thread>(pName.get_ptr(), initPriority, stackSize);
 
-	thread->PC = entry.addr();
-	thread->prio = initPriority;
-	thread->stack_size = stackSize;
-	thread->cpu_init();
+	thread->write_pc(entry.addr(), 0);
+	thread->TLS = fxm::get<arm_tls_manager>()->alloc();
 
-	return NOT_AN_ERROR(thread->id);
+	return not_an_error(thread->id);
 }
 
-arm_error_code sceKernelStartThread(s32 threadId, u32 argSize, vm::cptr<void> pArgBlock)
+error_code sceKernelStartThread(s32 threadId, u32 argSize, vm::cptr<void> pArgBlock)
 {
 	sceLibKernel.warning("sceKernelStartThread(threadId=0x%x, argSize=0x%x, pArgBlock=*0x%x)", threadId, argSize, pArgBlock);
 
@@ -75,23 +523,21 @@ arm_error_code sceKernelStartThread(s32 threadId, u32 argSize, vm::cptr<void> pA
 	// set SceKernelThreadEntry function arguments
 	thread->GPR[0] = argSize;
 	thread->GPR[1] = pos;
-
-	thread->state -= cpu_state::stop;
-	(*thread)->lock_notify();
+	thread->run();
 	return SCE_OK;
 }
 
-arm_error_code sceKernelExitThread(ARMv7Thread& cpu, s32 exitStatus)
+error_code sceKernelExitThread(ARMv7Thread& cpu, s32 exitStatus)
 {
 	sceLibKernel.warning("sceKernelExitThread(exitStatus=0x%x)", exitStatus);
 
 	// Exit status is stored in r0
-	cpu.state += cpu_state::exit;
+	cpu.state += cpu_flag::exit;
 
 	return SCE_OK;
 }
 
-arm_error_code sceKernelDeleteThread(s32 threadId)
+error_code sceKernelDeleteThread(s32 threadId)
 {
 	sceLibKernel.warning("sceKernelDeleteThread(threadId=0x%x)", threadId);
 
@@ -109,17 +555,19 @@ arm_error_code sceKernelDeleteThread(s32 threadId)
 	//	return SCE_KERNEL_ERROR_NOT_DORMANT;
 	//}
 
+	fxm::get<arm_tls_manager>()->dealloc(thread->TLS);
 	idm::remove<ARMv7Thread>(threadId);
 	return SCE_OK;
 }
 
-arm_error_code sceKernelExitDeleteThread(ARMv7Thread& cpu, s32 exitStatus)
+error_code sceKernelExitDeleteThread(ARMv7Thread& cpu, s32 exitStatus)
 {
 	sceLibKernel.warning("sceKernelExitDeleteThread(exitStatus=0x%x)", exitStatus);
 
-	//cpu.state += cpu_state::stop;
+	//cpu.state += cpu_flag::stop;
 
 	// Delete current thread; exit status is stored in r0
+	fxm::get<arm_tls_manager>()->dealloc(cpu.TLS);
 	idm::remove<ARMv7Thread>(cpu.id);
 
 	return SCE_OK;
@@ -129,28 +577,28 @@ s32 sceKernelChangeThreadCpuAffinityMask(s32 threadId, s32 cpuAffinityMask)
 {
 	sceLibKernel.todo("sceKernelChangeThreadCpuAffinityMask(threadId=0x%x, cpuAffinityMask=0x%x)", threadId, cpuAffinityMask);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetThreadCpuAffinityMask(s32 threadId)
 {
 	sceLibKernel.todo("sceKernelGetThreadCpuAffinityMask(threadId=0x%x)", threadId);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelChangeThreadPriority(s32 threadId, s32 priority)
 {
 	sceLibKernel.todo("sceKernelChangeThreadPriority(threadId=0x%x, priority=%d)", threadId, priority);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetThreadCurrentPriority()
 {
 	sceLibKernel.todo("sceKernelGetThreadCurrentPriority()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u32 sceKernelGetThreadId(ARMv7Thread& cpu)
@@ -164,80 +612,80 @@ s32 sceKernelChangeCurrentThreadAttr(u32 clearAttr, u32 setAttr)
 {
 	sceLibKernel.todo("sceKernelChangeCurrentThreadAttr()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetThreadExitStatus(s32 threadId, vm::ptr<s32> pExitStatus)
 {
 	sceLibKernel.todo("sceKernelGetThreadExitStatus(threadId=0x%x, pExitStatus=*0x%x)", threadId, pExitStatus);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetProcessId()
 {
 	sceLibKernel.todo("sceKernelGetProcessId()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCheckWaitableStatus()
 {
 	sceLibKernel.todo("sceKernelCheckWaitableStatus()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetThreadInfo(s32 threadId, vm::ptr<SceKernelThreadInfo> pInfo)
 {
 	sceLibKernel.todo("sceKernelGetThreadInfo(threadId=0x%x, pInfo=*0x%x)", threadId, pInfo);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetThreadRunStatus(vm::ptr<SceKernelThreadRunStatus> pStatus)
 {
 	sceLibKernel.todo("sceKernelGetThreadRunStatus(pStatus=*0x%x)", pStatus);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetSystemInfo(vm::ptr<SceKernelSystemInfo> pInfo)
 {
 	sceLibKernel.todo("sceKernelGetSystemInfo(pInfo=*0x%x)", pInfo);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelChangeThreadVfpException(s32 clearMask, s32 setMask)
 {
 	sceLibKernel.todo("sceKernelChangeThreadVfpException(clearMask=0x%x, setMask=0x%x)", clearMask, setMask);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetCurrentThreadVfpException()
 {
 	sceLibKernel.todo("sceKernelGetCurrentThreadVfpException()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDelayThread(u32 usec)
 {
 	sceLibKernel.todo("sceKernelDelayThread()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDelayThreadCB(u32 usec)
 {
 	sceLibKernel.todo("sceKernelDelayThreadCB()");
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
-arm_error_code sceKernelWaitThreadEnd(s32 threadId, vm::ptr<s32> pExitStatus, vm::ptr<u32> pTimeout)
+error_code sceKernelWaitThreadEnd(s32 threadId, vm::ptr<s32> pExitStatus, vm::ptr<u32> pTimeout)
 {
 	sceLibKernel.warning("sceKernelWaitThreadEnd(threadId=0x%x, pExitStatus=*0x%x, pTimeout=*0x%x)", threadId, pExitStatus, pTimeout);
 
@@ -252,7 +700,7 @@ arm_error_code sceKernelWaitThreadEnd(s32 threadId, vm::ptr<s32> pExitStatus, vm
 	{
 	}
 
-	(*thread)->join();
+	thread->join();
 
 	if (pExitStatus)
 	{
@@ -266,108 +714,103 @@ s32 sceKernelWaitThreadEndCB(s32 threadId, vm::ptr<s32> pExitStatus, vm::ptr<u32
 {
 	sceLibKernel.todo("sceKernelWaitThreadEndCB(threadId=0x%x, pExitStatus=*0x%x, pTimeout=*0x%x)", threadId, pExitStatus, pTimeout);
 
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Callback functions
 
 s32 sceKernelCreateCallback(vm::cptr<char> pName, u32 attr, vm::ptr<SceKernelCallbackFunction> callbackFunc, vm::ptr<void> pCommon)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDeleteCallback(s32 callbackId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelNotifyCallback(s32 callbackId, s32 notifyArg)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelCallback(s32 callbackId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetCallbackCount(s32 callbackId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCheckCallback()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetCallbackInfo(s32 callbackId, vm::ptr<SceKernelCallbackInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelRegisterCallbackToEvent(s32 eventId, s32 callbackId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnregisterCallbackFromEvent(s32 eventId, s32 callbackId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnregisterCallbackFromEventAll(s32 eventId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Event functions
 
 s32 sceKernelWaitEvent(s32 eventId, u32 waitPattern, vm::ptr<u32> pResultPattern, vm::ptr<u64> pUserData, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitEventCB(s32 eventId, u32 waitPattern, vm::ptr<u32> pResultPattern, vm::ptr<u64> pUserData, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelPollEvent(s32 eventId, u32 bitPattern, vm::ptr<u32> pResultPattern, vm::ptr<u64> pUserData)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelEvent(s32 eventId, vm::ptr<s32> pNumWaitThreads)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetEventInfo(s32 eventId, vm::ptr<SceKernelEventInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitMultipleEvents(vm::ptr<SceKernelWaitEvent> pWaitEventList, s32 numEvents, u32 waitMode, vm::ptr<SceKernelResultEvent> pResultEventList, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitMultipleEventsCB(vm::ptr<SceKernelWaitEvent> pWaitEventList, s32 numEvents, u32 waitMode, vm::ptr<SceKernelResultEvent> pResultEventList, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 struct psp2_event_flag final
 {
-	struct alignas(8) ctrl_t
-	{
-		u32 waiters;
-		u32 pattern;
-	};
-
-	atomic_t<ctrl_t> ctrl;    // Sync variable
-	atomic_t<u64> wait_ctr{}; // FIFO ordering helper
+	static const u32 id_base = 1;
+	static const u32 id_step = 2;
+	static const u32 id_count = 8192;
 
 	using ipc = ipc_manager<psp2_event_flag, std::string>;
 
@@ -377,11 +820,15 @@ struct psp2_event_flag final
 	const u32 attr;
 	const u32 init;
 
+	atomic_t<u32> pattern{0}; // Sync variable
+	atomic_t<u32> waiters{0}; // Waiter number or waiter id
+	atomic_t<u64> wait_ctr;   // FIFO ordering helper
+
 	psp2_event_flag(std::string&& name, u32 attr, u32 pattern)
-		: ctrl({0, pattern})
-		, name(std::move(name))
+		: name(std::move(name))
 		, attr(attr)
 		, init(pattern)
+		, pattern(pattern)
 	{
 	}
 
@@ -404,14 +851,15 @@ struct psp2_event_flag final
 	// Commands
 	enum class task : u32
 	{
-		null = 0,
-		wait,
-		poll,
-		set,
-		clear,
-		cancel,
-		destroy,
-		signal,
+		null,
+		wait,    // Check condition, enqueue waiting thread
+		poll,    // Check condition only
+		set,     // Set pattern bits and wake up threads
+		clear,   // Clear pattern bits (bitwise AND)
+		cancel,  // Wake up all threads with SCE_KERNEL_ERROR_WAIT_CANCEL
+		destroy, // Wake up all threads with SCE_KERNEL_ERROR_WAIT_DELETE
+		timeout, // Dequeue waiting thread (cleanup)
+		signal,  // Signal selected thread (aux)
 	};
 
 	struct alignas(8) cmd_t
@@ -424,23 +872,20 @@ struct psp2_event_flag final
 	// Returns true if the command has been completed immediately. Its status is unknown otherwise.
 	bool exec(task type, u32 arg)
 	{
-		// Acquire position in the queue
+		// Allocate position in the queue
 		const u32 push_pos = m_workload.push_begin();
 
 		// Make the command
 		cmd_t cmd{type, arg};
 
+		// Get queue head
 		u32 pos = m_workload.peek();
 
-		// Check optimistic case
+		// Check non-optimistic case
 		if (UNLIKELY(pos != push_pos))
 		{
-			// Write the command
-			m_workload[push_pos] = cmd;
-			pos = m_workload.peek(); // ???
-
-			// Try to acquire a command
-			cmd = m_workload[pos].exchange({task::null});
+			// Try to acquire first command in the queue, *then* write current command
+			m_workload[push_pos] = std::exchange(cmd, m_workload[pos].exchange({task::null}));
 		}
 
 		while (true)
@@ -458,16 +903,32 @@ struct psp2_event_flag final
 			case task::wait:    op_wait(cmd.arg); break;
 			case task::poll:    op_poll(cmd.arg); break;
 			case task::set:     op_set(cmd.arg); break;
-			case task::clear:   op_clear(cmd.arg); break;
+			case task::clear:   pattern &= cmd.arg; break;
 			case task::cancel:  op_stop(vm::cast(cmd.arg), SCE_KERNEL_ERROR_WAIT_CANCEL); break;
 			case task::destroy: op_stop(vm::cast(cmd.arg), SCE_KERNEL_ERROR_WAIT_DELETE); break;
 
+			case task::timeout:
+			{
+				// Timeout cleanup
+				idm::check<ARMv7Thread>(cmd.arg, [&](ARMv7Thread& cpu)
+				{
+					if (cpu.owner.compare_and_swap_test(this, nullptr))
+					{
+						cpu.GPR[0] = SCE_KERNEL_ERROR_WAIT_TIMEOUT;
+						cpu.GPR[1] = pattern;
+						waiters -= attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
+					}
+				});
+
+				break;
+			}
+
 			case task::signal:
 			{
-				idm::get<ARMv7Thread>(cmd.arg, [&](u32, ARMv7Thread& cpu)
+				idm::check<ARMv7Thread>(cmd.arg, [](auto& cpu)
 				{
-					cpu.state += cpu_state::signal;
-					cpu->lock_notify();
+					cpu.state += cpu_flag::signal;
+					cpu.notify();
 				});
 
 				break;
@@ -494,11 +955,11 @@ struct psp2_event_flag final
 		{
 			if (!exec(task::signal, cpu.id))
 			{
-				thread_lock{cpu}, thread_ctrl::wait(WRAP_EXPR(cpu.state.test_and_reset(cpu_state::signal)));
+				thread_ctrl::wait([&] { return cpu.state.test_and_reset(cpu_flag::signal); });
 			}
 			else
 			{
-				cpu.state -= cpu_state::signal;
+				cpu.state -= cpu_flag::signal;
 			}
 		}
 	}
@@ -506,30 +967,42 @@ struct psp2_event_flag final
 private:
 	lf_fifo<atomic_t<cmd_t>, 16> m_workload;
 
-	// Check condition
 	void op_wait(u32 thread_id)
 	{
-		idm::get<ARMv7Thread>(thread_id, [&](u32, ARMv7Thread& cpu)
+		idm::check<ARMv7Thread>(thread_id, [=](ARMv7Thread& cpu)
 		{
-			const u32 pattern = ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state) -> u32
+			if (attr & SCE_KERNEL_ATTR_MULTI)
 			{
-				const u32 pat = state.pattern;
+				waiters++;
+			}
+			else if (!waiters.compare_and_swap_test(0, thread_id))
+			{
+				cpu.GPR[0] = SCE_KERNEL_ERROR_EVF_MULTI;
+				cpu.GPR[1] = pattern;
+				cpu.state += cpu_flag::signal;
+				cpu.notify();
+				return;
+			}
+
+			const u32 old_pattern = pattern.atomic_op([&](u32& value) -> u32
+			{
+				const u32 pat = value;
 				if (pat_test(pat, cpu.GPR[1], cpu.GPR[0]))
 				{
-					state.pattern &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
-					state.waiters -= attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
+					value &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
 					return pat;
 				}
 
 				return 0;
 			});
 
-			if (pattern)
+			if (old_pattern)
 			{
+				waiters -= attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
 				cpu.GPR[0] = SCE_OK;
-				cpu.GPR[1] = pattern;
-				cpu.state += cpu_state::signal;
-				cpu->lock_notify();
+				cpu.GPR[1] = old_pattern;
+				cpu.state += cpu_flag::signal;
+				cpu.notify();
 			}
 			else
 			{
@@ -539,17 +1012,16 @@ private:
 		});
 	}
 
-	// Check condition
 	void op_poll(u32 thread_id)
 	{
-		idm::get<ARMv7Thread>(thread_id, [&](u32, ARMv7Thread& cpu)
+		idm::check<ARMv7Thread>(thread_id, [&](ARMv7Thread& cpu)
 		{
-			cpu.GPR[1] = ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state) -> u32
+			cpu.GPR[1] = pattern.atomic_op([&](u32& value) -> u32
 			{
-				const u32 pat = state.pattern;
+				const u32 pat = value;
 				if (pat_test(pat, cpu.GPR[1], cpu.GPR[0]))
 				{
-					state.pattern &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
+					value &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
 					return pat;
 				}
 
@@ -558,26 +1030,24 @@ private:
 		});
 	}
 
-	// Set pattern bits and wake up threads
-	void op_set(u32 pattern)
+	void op_set(u32 _pattern)
 	{
-		const auto new_state = ctrl.op_fetch([&](psp2_event_flag::ctrl_t& state)
-		{
-			state.pattern |= pattern;
-		});
+		pattern |= _pattern;
 
-		if (new_state.waiters)
+		if (const u32 _waiters = waiters)
 		{
+			const u32 new_pattern = pattern;
+
 			std::vector<std::reference_wrapper<ARMv7Thread>> threads;
 
-			// Check and lock appropriate threads
+			// Enumerate appropriate threads
 			if (attr & SCE_KERNEL_ATTR_MULTI)
 			{
-				threads.reserve(new_state.waiters);
+				threads.reserve(_waiters);
 
-				idm::select<ARMv7Thread>([&](u32 id, ARMv7Thread& cpu)
+				idm::select<ARMv7Thread>([&](u32, ARMv7Thread& cpu)
 				{
-					if (cpu->lock_if(WRAP_EXPR(cpu.owner == this && pat_test(new_state.pattern, cpu.GPR[1], cpu.GPR[0]))))
+					if (cpu.owner == this && pat_test(new_pattern, cpu.GPR[1], cpu.GPR[0]))
 					{
 						threads.emplace_back(cpu);
 					}
@@ -598,9 +1068,9 @@ private:
 			}
 			else
 			{
-				idm::get<ARMv7Thread>(new_state.waiters, [&](u32 id, ARMv7Thread& cpu)
+				idm::check<ARMv7Thread>(_waiters, [&](ARMv7Thread& cpu)
 				{
-					if (cpu->lock_if(WRAP_EXPR(cpu.owner == this && pat_test(new_state.pattern, cpu.GPR[1], cpu.GPR[0]))))
+					if (cpu.owner == this && pat_test(new_pattern, cpu.GPR[1], cpu.GPR[0]))
 					{
 						threads.emplace_back(cpu);
 					}
@@ -610,14 +1080,13 @@ private:
 			// Wake up threads
 			for (ARMv7Thread& cpu : threads)
 			{
-				const u32 old_pattern = ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state) -> u32
+				const u32 old_pattern = pattern.atomic_op([&](u32& value) -> u32
 				{
-					const u32 pat = state.pattern;
+					const u32 pat = value;
 
 					if (pat_test(pat, cpu.GPR[1], cpu.GPR[0]))
 					{
-						state.pattern &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
-						state.waiters -= attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
+						value &= pat_clear(cpu.GPR[1], cpu.GPR[0]);
 						return pat;
 					}
 
@@ -628,78 +1097,68 @@ private:
 				{
 					cpu.GPR[0] = SCE_OK;
 					cpu.GPR[1] = old_pattern;
-					cpu.state += cpu_state::signal;
+					cpu.state += cpu_flag::signal;
 					cpu.owner = nullptr;
-					cpu->unlock();
-					cpu->notify();
-				}
-				else
-				{
-					cpu->unlock();
+					waiters -= attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
+					cpu.notify();
 				}
 			}
 		}
 	}
 
-	// Clear pattern bits (bitwise AND)
-	void op_clear(u32 pattern)
-	{
-		ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state)
-		{
-			state.pattern &= pattern;
-		});
-	}
-
-	// Wake up all threads
 	void op_stop(vm::ptr<u32> ptr, s32 error)
 	{
-		s32 result = 0;
-		const u32 pattern = ptr ? ptr->value() : ctrl.load().pattern;
+		const u32 _pattern = ptr ? ptr->value() : pattern.load();
+
+		std::vector<std::reference_wrapper<ARMv7Thread>> threads;
 
 		idm::select<ARMv7Thread>([&](u32, ARMv7Thread& cpu)
 		{
-			if (cpu->lock_if(WRAP_EXPR(cpu.owner == this)))
+			if (cpu.owner == this)
 			{
-				cpu.GPR[0] = error;
-				cpu.GPR[1] = pattern;
-				cpu.state += cpu_state::signal;
-				cpu.owner = nullptr;
-				cpu->unlock();
-				cpu->notify();
-				result++;
+				threads.emplace_back(cpu);
 			}
 		});
 
 		if (ptr)
 		{
-			*ptr = result;
+			*ptr = static_cast<u32>(threads.size());
 		}
 
-		ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state)
+		for (ARMv7Thread& cpu : threads)
 		{
-			state.pattern = pattern;
-			state.waiters = attr & SCE_KERNEL_ATTR_MULTI ? state.waiters - result : 0;
-		});
+			cpu.GPR[0] = error;
+			cpu.GPR[1] = _pattern;
+			cpu.state += cpu_flag::signal;
+			cpu.owner = nullptr;
+			cpu.notify();
+		}
+
+		pattern = _pattern;
+		waiters = 0;
 	}
 };
 
 template<> DECLARE(psp2_event_flag::ipc::g_ipc) {};
 
-arm_error_code sceKernelCreateEventFlag(vm::cptr<char> pName, u32 attr, u32 initPattern, vm::cptr<SceKernelEventFlagOptParam> pOptParam)
+error_code sceKernelCreateEventFlag(vm::cptr<char> pName, u32 attr, u32 initPattern, vm::cptr<SceKernelEventFlagOptParam> pOptParam)
 {
-	sceLibKernel.error("sceKernelCreateEventFlag(pName=*0x%x, attr=0x%x, initPattern=0x%x, pOptParam=*0x%x)", pName, attr, initPattern, pOptParam);
+	sceLibKernel.error("sceKernelCreateEventFlag(pName=%s, attr=0x%x, initPattern=0x%x, pOptParam=*0x%x)", pName, attr, initPattern, pOptParam);
 
 	// Create EVF
 	auto evf = std::make_shared<psp2_event_flag>(pName.get_ptr(), attr, initPattern);
 
 	// Try to register IPC name, only if not empty string (TODO)
-	if (evf->name.empty() || !psp2_event_flag::ipc::add(evf->name, WRAP_EXPR(evf))) evf->ipc_ref = 0;
+	if (evf->name.empty() || !psp2_event_flag::ipc::add(evf->name, [&] { return evf; }))
+	{
+		evf->ipc_ref = 0;
+	}
 
 	// Register ID
-	return NOT_AN_ERROR(idm::import_existing(evf));
+	return not_an_error(idm::import_existing(evf));
 }
 
-arm_error_code sceKernelDeleteEventFlag(s32 evfId)
+error_code sceKernelDeleteEventFlag(s32 evfId)
 {
 	sceLibKernel.error("sceKernelDeleteEventFlag(evfId=0x%x)", evfId);
 
@@ -725,9 +1184,9 @@ arm_error_code sceKernelDeleteEventFlag(s32 evfId)
 	return SCE_OK;
 }
 
-arm_error_code sceKernelOpenEventFlag(vm::cptr<char> pName)
+error_code sceKernelOpenEventFlag(vm::cptr<char> pName)
 {
-	sceLibKernel.error("sceKernelOpenEventFlag(pName=*0x%x)", pName);
+	sceLibKernel.error("sceKernelOpenEventFlag(pName=%s)", pName);
 
 	const auto evf = psp2_event_flag::ipc::get(pName.get_ptr());
 
@@ -737,10 +1196,10 @@ arm_error_code sceKernelOpenEventFlag(vm::cptr<char> pName)
 		return SCE_KERNEL_ERROR_UID_CANNOT_FIND_BY_NAME;
 	}
 
-	return NOT_AN_ERROR(idm::import_existing(evf));
+	return not_an_error(idm::import_existing(evf));
 }
 
-arm_error_code sceKernelCloseEventFlag(s32 evfId)
+error_code sceKernelCloseEventFlag(s32 evfId)
 {
 	sceLibKernel.error("sceKernelCloseEventFlag(evfId=0x%x)", evfId);
 
@@ -760,7 +1219,7 @@ arm_error_code sceKernelCloseEventFlag(s32 evfId)
 	return SCE_OK;
 }
 
-arm_error_code sceKernelWaitEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat, vm::ptr<u32> pTimeout)
+error_code sceKernelWaitEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat, vm::ptr<u32> pTimeout)
 {
 	sceLibKernel.error("sceKernelWaitEventFlag(evfId=0x%x, bitPattern=0x%x, waitMode=0x%x, pResultPat=*0x%x, pTimeout=*0x%x)", evfId, bitPattern, waitMode, pResultPat, pTimeout);
 
@@ -774,73 +1233,91 @@ arm_error_code sceKernelWaitEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPatter
 		return SCE_KERNEL_ERROR_INVALID_UID;
 	}
 
-	// First chance
-	const auto state = evf->ctrl.fetch_op([&](psp2_event_flag::ctrl_t& state)
-	{
-		if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
-		{
-			state.pattern &= psp2_event_flag::pat_clear(bitPattern, waitMode);
-		}
-		else if (evf->attr & SCE_KERNEL_ATTR_MULTI)
-		{
-			state.waiters++;
-		}
-		else if (!state.waiters)
-		{
-			state.waiters = cpu.id;
-		}
-	});
+	// First chance (TODO)
+	//const auto state = evf->ctrl.fetch_op([&](psp2_event_flag::ctrl_t& state)
+	//{
+	//	if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
+	//	{
+	//		state.pattern &= psp2_event_flag::pat_clear(bitPattern, waitMode);
+	//	}
+	//	else if (evf->attr & SCE_KERNEL_ATTR_MULTI)
+	//	{
+	//		state.waiters++;
+	//	}
+	//	else if (!state.waiters)
+	//	{
+	//		state.waiters = cpu.id;
+	//	}
+	//});
 
-	if (state.waiters && !(evf->attr & SCE_KERNEL_ATTR_MULTI))
-	{
-		return SCE_KERNEL_ERROR_EVF_MULTI;
-	}
+	//if (evf->waiters && !(evf->attr & SCE_KERNEL_ATTR_MULTI))
+	//{
+	//	return SCE_KERNEL_ERROR_EVF_MULTI;
+	//}
 
-	if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
-	{
-		if (pResultPat) *pResultPat = state.pattern;
-		return SCE_OK;
-	}
+	//if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
+	//{
+	//	if (pResultPat) *pResultPat = state.pattern;
+	//	return SCE_OK;
+	//}
 
 	// Set register values for external use
 	cpu.GPR[0] = waitMode;
 	cpu.GPR[1] = bitPattern;
 
 	// Second chance
-	if (evf->exec(psp2_event_flag::task::wait, cpu.id) && cpu.state.test_and_reset(cpu_state::signal))
+	if (!evf->exec(psp2_event_flag::task::wait, cpu.id) || !cpu.state.test_and_reset(cpu_flag::signal))
 	{
-		if (pResultPat) *pResultPat = cpu.GPR[1];
-		return SCE_OK;
+		while (!cpu.state.test_and_reset(cpu_flag::signal))
+		{
+			if (timeout)
+			{
+				const u64 passed = get_system_time() - start_time;
+
+				if (passed >= timeout)
+				{
+					if (!evf->exec(psp2_event_flag::task::timeout, cpu.id))
+					{
+						if (!evf->exec(psp2_event_flag::task::signal, cpu.id))
+						{
+							thread_ctrl::wait([&] { return cpu.state.test_and_reset(cpu_flag::signal); });
+						}
+						else
+						{
+							cpu.state -= cpu_flag::signal;
+						}
+					}
+
+					break;
+				}
+
+				thread_ctrl::wait_for(timeout - passed);
+			}
+			else
+			{
+				thread_ctrl::wait();
+			}
+		}
 	}
 
-	cpu_thread_lock entry(cpu);
-
-	if (!thread_ctrl::wait(timeout, WRAP_EXPR(cpu.state.test_and_reset(cpu_state::signal))))
+	if (cpu.GPR[0] == SCE_KERNEL_ERROR_EVF_MULTI)
 	{
-		// Timeout cleanup
-		cpu.owner = nullptr;
-		cpu.GPR[0] = SCE_KERNEL_ERROR_WAIT_TIMEOUT;
-		cpu.GPR[1] = evf->ctrl.atomic_op([&](psp2_event_flag::ctrl_t& state)
-		{
-			state.waiters -= evf->attr & SCE_KERNEL_ATTR_MULTI ? 1 : cpu.id;
-			return state.pattern;
-		});
+		return SCE_KERNEL_ERROR_EVF_MULTI;
 	}
 
 	if (pResultPat) *pResultPat = cpu.GPR[1];
 	if (pTimeout) *pTimeout = static_cast<u32>(std::max<s64>(0, timeout - (get_system_time() - start_time)));
-
-	return NOT_AN_ERROR(cpu.GPR[0]);
+	return not_an_error(cpu.GPR[0]);
 }
 
-arm_error_code sceKernelWaitEventFlagCB(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat, vm::ptr<u32> pTimeout)
+error_code sceKernelWaitEventFlagCB(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat, vm::ptr<u32> pTimeout)
 {
 	sceLibKernel.todo("sceKernelWaitEventFlagCB(evfId=0x%x, bitPattern=0x%x, waitMode=0x%x, pResultPat=*0x%x, pTimeout=*0x%x)", evfId, bitPattern, waitMode, pResultPat, pTimeout);
 
 	return sceKernelWaitEventFlag(cpu, evfId, bitPattern, waitMode, pResultPat, pTimeout);
 }
 
-arm_error_code sceKernelPollEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat)
+error_code sceKernelPollEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPattern, u32 waitMode, vm::ptr<u32> pResultPat)
 {
 	sceLibKernel.error("sceKernelPollEventFlag(evfId=0x%x, bitPattern=0x%x, waitMode=0x%x, pResultPat=*0x%x)", evfId, bitPattern, waitMode, pResultPat);
 
@@ -851,23 +1328,17 @@ arm_error_code sceKernelPollEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPatter
 		return SCE_KERNEL_ERROR_INVALID_UID;
 	}
 
-	// First chance
-	const auto state = evf->ctrl.fetch_op([&](psp2_event_flag::ctrl_t& state)
-	{
-		if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
-		{
-			state.pattern &= psp2_event_flag::pat_clear(bitPattern, waitMode);
-		}
-	});
+	// First chance (TODO)
+	//const auto state = evf->ctrl.fetch_op([&](psp2_event_flag::ctrl_t& state)
+	//{
+	//	if (!state.waiters && psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
+	//	{
+	//		state.pattern &= psp2_event_flag::pat_clear(bitPattern, waitMode);
+	//	}
+	//});
 
-	if (psp2_event_flag::pat_test(state.pattern, bitPattern, waitMode))
+	if (psp2_event_flag::pat_test(evf->pattern, bitPattern, waitMode))
 	{
-		if (!state.waiters)
-		{
-			*pResultPat = state.pattern;
-			return SCE_OK;
-		}
-
 		cpu.GPR[0] = waitMode;
 		cpu.GPR[1] = bitPattern;
 		
@@ -880,10 +1351,10 @@ arm_error_code sceKernelPollEventFlag(ARMv7Thread& cpu, s32 evfId, u32 bitPatter
 		}
 	}
 
-	return NOT_AN_ERROR(SCE_KERNEL_ERROR_EVENT_COND);
+	return not_an_error(SCE_KERNEL_ERROR_EVENT_COND);
 }
 
-arm_error_code sceKernelSetEventFlag(s32 evfId, u32 bitPattern)
+error_code sceKernelSetEventFlag(s32 evfId, u32 bitPattern)
 {
 	sceLibKernel.error("sceKernelSetEventFlag(evfId=0x%x, bitPattern=0x%x)", evfId, bitPattern);
 
@@ -901,7 +1372,7 @@ arm_error_code sceKernelSetEventFlag(s32 evfId, u32 bitPattern)
 	return SCE_OK;
 }
 
-arm_error_code sceKernelClearEventFlag(s32 evfId, u32 bitPattern)
+error_code sceKernelClearEventFlag(s32 evfId, u32 bitPattern)
 {
 	sceLibKernel.error("sceKernelClearEventFlag(evfId=0x%x, bitPattern=0x%x)", evfId, bitPattern);
 
@@ -919,7 +1390,7 @@ arm_error_code sceKernelClearEventFlag(s32 evfId, u32 bitPattern)
 	return SCE_OK;
 }
 
-arm_error_code sceKernelCancelEventFlag(ARMv7Thread& cpu, s32 evfId, u32 setPattern, vm::ptr<s32> pNumWaitThreads)
+error_code sceKernelCancelEventFlag(ARMv7Thread& cpu, s32 evfId, u32 setPattern, vm::ptr<s32> pNumWaitThreads)
 {
 	sceLibKernel.error("sceKernelCancelEventFlag(evfId=0x%x, setPattern=0x%x, pNumWaitThreads=*0x%x)", evfId, setPattern, pNumWaitThreads);
 
@@ -937,7 +1408,7 @@ arm_error_code sceKernelCancelEventFlag(ARMv7Thread& cpu, s32 evfId, u32 setPatt
 	return SCE_OK;
 }
 
-arm_error_code sceKernelGetEventFlagInfo(s32 evfId, vm::ptr<SceKernelEventFlagInfo> pInfo)
+error_code sceKernelGetEventFlagInfo(s32 evfId, vm::ptr<SceKernelEventFlagInfo> pInfo)
 {
 	sceLibKernel.error("sceKernelGetEventFlagInfo(evfId=0x%x, pInfo=*0x%x)", evfId, pInfo);
 
@@ -955,25 +1426,22 @@ arm_error_code sceKernelGetEventFlagInfo(s32 evfId, vm::ptr<SceKernelEventFlagIn
 
 	pInfo->attr = evf->attr;
 	pInfo->initPattern = evf->init;
-
-	const auto state = evf->ctrl.load();
-
-	pInfo->currentPattern = state.pattern;
-	pInfo->numWaitThreads = evf->attr & SCE_KERNEL_ATTR_MULTI ? state.waiters : state.waiters != 0;
+	pInfo->currentPattern = evf->pattern;
+	pInfo->numWaitThreads = evf->attr & SCE_KERNEL_ATTR_MULTI ? evf->waiters.load() : evf->waiters != 0;
 
 	return SCE_OK;
 }
 
 // Semaphore functions
 
-arm_error_code sceKernelCreateSema(vm::cptr<char> pName, u32 attr, s32 initCount, s32 maxCount, vm::cptr<SceKernelSemaOptParam> pOptParam)
+error_code sceKernelCreateSema(vm::cptr<char> pName, u32 attr, s32 initCount, s32 maxCount, vm::cptr<SceKernelSemaOptParam> pOptParam)
 {
-	sceLibKernel.error("sceKernelCreateSema(pName=*0x%x, attr=0x%x, initCount=%d, maxCount=%d, pOptParam=*0x%x)", pName, attr, initCount, maxCount, pOptParam);
+	sceLibKernel.error("sceKernelCreateSema(pName=%s, attr=0x%x, initCount=%d, maxCount=%d, pOptParam=*0x%x)", pName, attr, initCount, maxCount, pOptParam);
 
-	return NOT_AN_ERROR(idm::make<psp2_semaphore>(pName.get_ptr(), attr, initCount, maxCount));
+	return not_an_error(idm::make<psp2_semaphore>(pName.get_ptr(), attr, initCount, maxCount));
 }
 
-arm_error_code sceKernelDeleteSema(s32 semaId)
+error_code sceKernelDeleteSema(s32 semaId)
 {
 	sceLibKernel.error("sceKernelDeleteSema(semaId=0x%x)", semaId);
 
@@ -991,15 +1459,15 @@ arm_error_code sceKernelDeleteSema(s32 semaId)
 
 s32 sceKernelOpenSema(vm::cptr<char> pName)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCloseSema(s32 semaId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
-arm_error_code sceKernelWaitSema(s32 semaId, s32 needCount, vm::ptr<u32> pTimeout)
+error_code sceKernelWaitSema(s32 semaId, s32 needCount, vm::ptr<u32> pTimeout)
 {
 	sceLibKernel.error("sceKernelWaitSema(semaId=0x%x, needCount=%d, pTimeout=*0x%x)", semaId, needCount, pTimeout);
 
@@ -1017,39 +1485,39 @@ arm_error_code sceKernelWaitSema(s32 semaId, s32 needCount, vm::ptr<u32> pTimeou
 
 s32 sceKernelWaitSemaCB(s32 semaId, s32 needCount, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelPollSema(s32 semaId, s32 needCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalSema(s32 semaId, s32 signalCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelSema(s32 semaId, s32 setCount, vm::ptr<s32> pNumWaitThreads)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetSemaInfo(s32 semaId, vm::ptr<SceKernelSemaInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Mutex functions
 
-arm_error_code sceKernelCreateMutex(vm::cptr<char> pName, u32 attr, s32 initCount, vm::cptr<SceKernelMutexOptParam> pOptParam)
+error_code sceKernelCreateMutex(vm::cptr<char> pName, u32 attr, s32 initCount, vm::cptr<SceKernelMutexOptParam> pOptParam)
 {
-	sceLibKernel.error("sceKernelCreateMutex(pName=*0x%x, attr=0x%x, initCount=%d, pOptParam=*0x%x)", pName, attr, initCount, pOptParam);
+	sceLibKernel.error("sceKernelCreateMutex(pName=%s, attr=0x%x, initCount=%d, pOptParam=*0x%x)", pName, attr, initCount, pOptParam);
 
-	return NOT_AN_ERROR(idm::make<psp2_mutex>(pName.get_ptr(), attr, initCount));
+	return not_an_error(idm::make<psp2_mutex>(pName.get_ptr(), attr, initCount));
 }
 
-arm_error_code sceKernelDeleteMutex(s32 mutexId)
+error_code sceKernelDeleteMutex(s32 mutexId)
 {
 	sceLibKernel.error("sceKernelDeleteMutex(mutexId=0x%x)", mutexId);
 
@@ -1067,91 +1535,91 @@ arm_error_code sceKernelDeleteMutex(s32 mutexId)
 
 s32 sceKernelOpenMutex(vm::cptr<char> pName)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCloseMutex(s32 mutexId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockMutex(s32 mutexId, s32 lockCount, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockMutexCB(s32 mutexId, s32 lockCount, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelTryLockMutex(s32 mutexId, s32 lockCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnlockMutex(s32 mutexId, s32 unlockCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelMutex(s32 mutexId, s32 newCount, vm::ptr<s32> pNumWaitThreads)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetMutexInfo(s32 mutexId, vm::ptr<SceKernelMutexInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Lightweight mutex functions
 
 s32 sceKernelCreateLwMutex(vm::ptr<SceKernelLwMutexWork> pWork, vm::cptr<char> pName, u32 attr, s32 initCount, vm::cptr<SceKernelLwMutexOptParam> pOptParam)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDeleteLwMutex(vm::ptr<SceKernelLwMutexWork> pWork)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockLwMutex(vm::ptr<SceKernelLwMutexWork> pWork, s32 lockCount, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockLwMutexCB(vm::ptr<SceKernelLwMutexWork> pWork, s32 lockCount, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelTryLockLwMutex(vm::ptr<SceKernelLwMutexWork> pWork, s32 lockCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnlockLwMutex(vm::ptr<SceKernelLwMutexWork> pWork, s32 unlockCount)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetLwMutexInfo(vm::ptr<SceKernelLwMutexWork> pWork, vm::ptr<SceKernelLwMutexInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetLwMutexInfoById(s32 lwMutexId, vm::ptr<SceKernelLwMutexInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Condition variable functions
 
-arm_error_code sceKernelCreateCond(vm::cptr<char> pName, u32 attr, s32 mutexId, vm::cptr<SceKernelCondOptParam> pOptParam)
+error_code sceKernelCreateCond(vm::cptr<char> pName, u32 attr, s32 mutexId, vm::cptr<SceKernelCondOptParam> pOptParam)
 {
-	sceLibKernel.error("sceKernelCreateCond(pName=*0x%x, attr=0x%x, mutexId=0x%x, pOptParam=*0x%x)", pName, attr, mutexId, pOptParam);
+	sceLibKernel.error("sceKernelCreateCond(pName=%s, attr=0x%x, mutexId=0x%x, pOptParam=*0x%x)", pName, attr, mutexId, pOptParam);
 
 	const auto mutex = idm::get<psp2_mutex>(mutexId);
 
@@ -1160,10 +1628,10 @@ arm_error_code sceKernelCreateCond(vm::cptr<char> pName, u32 attr, s32 mutexId, 
 		return SCE_KERNEL_ERROR_INVALID_UID;
 	}
 
-	return NOT_AN_ERROR(idm::make<psp2_cond>(pName.get_ptr(), attr, mutex));
+	return not_an_error(idm::make<psp2_cond>(pName.get_ptr(), attr, mutex));
 }
 
-arm_error_code sceKernelDeleteCond(s32 condId)
+error_code sceKernelDeleteCond(s32 condId)
 {
 	sceLibKernel.error("sceKernelDeleteCond(condId=0x%x)", condId);
 
@@ -1181,266 +1649,266 @@ arm_error_code sceKernelDeleteCond(s32 condId)
 
 s32 sceKernelOpenCond(vm::cptr<char> pName)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCloseCond(s32 condId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitCond(s32 condId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitCondCB(s32 condId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalCond(s32 condId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalCondAll(s32 condId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalCondTo(s32 condId, s32 threadId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetCondInfo(s32 condId, vm::ptr<SceKernelCondInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Lightweight condition variable functions
 
 s32 sceKernelCreateLwCond(vm::ptr<SceKernelLwCondWork> pWork, vm::cptr<char> pName, u32 attr, vm::ptr<SceKernelLwMutexWork> pLwMutex, vm::cptr<SceKernelLwCondOptParam> pOptParam)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDeleteLwCond(vm::ptr<SceKernelLwCondWork> pWork)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitLwCond(vm::ptr<SceKernelLwCondWork> pWork, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelWaitLwCondCB(vm::ptr<SceKernelLwCondWork> pWork, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalLwCond(vm::ptr<SceKernelLwCondWork> pWork)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalLwCondAll(vm::ptr<SceKernelLwCondWork> pWork)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSignalLwCondTo(vm::ptr<SceKernelLwCondWork> pWork, s32 threadId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetLwCondInfo(vm::ptr<SceKernelLwCondWork> pWork, vm::ptr<SceKernelLwCondInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetLwCondInfoById(s32 lwCondId, vm::ptr<SceKernelLwCondInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Time functions
 
 s32 sceKernelGetSystemTime(vm::ptr<SceKernelSysClock> pClock)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u64 sceKernelGetSystemTimeWide()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u32 sceKernelGetSystemTimeLow()
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Timer functions
 
 s32 sceKernelCreateTimer(vm::cptr<char> pName, u32 attr, vm::cptr<SceKernelTimerOptParam> pOptParam)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDeleteTimer(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelOpenTimer(vm::cptr<char> pName)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCloseTimer(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelStartTimer(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelStopTimer(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetTimerBase(s32 timerId, vm::ptr<SceKernelSysClock> pBase)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u64 sceKernelGetTimerBaseWide(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetTimerTime(s32 timerId, vm::ptr<SceKernelSysClock> pClock)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u64 sceKernelGetTimerTimeWide(s32 timerId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSetTimerTime(s32 timerId, vm::ptr<SceKernelSysClock> pClock)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 u64 sceKernelSetTimerTimeWide(s32 timerId, u64 clock)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelSetTimerEvent(s32 timerId, s32 type, vm::ptr<SceKernelSysClock> pInterval, s32 fRepeat)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelTimer(s32 timerId, vm::ptr<s32> pNumWaitThreads)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetTimerInfo(s32 timerId, vm::ptr<SceKernelTimerInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 // Reader/writer lock functions
 
 s32 sceKernelCreateRWLock(vm::cptr<char> pName, u32 attr, vm::cptr<SceKernelRWLockOptParam> pOptParam)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelDeleteRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelOpenRWLock(vm::cptr<char> pName)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCloseRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockReadRWLock(s32 rwLockId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockReadRWLockCB(s32 rwLockId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelTryLockReadRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnlockReadRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockWriteRWLock(s32 rwLockId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelLockWriteRWLockCB(s32 rwLockId, vm::ptr<u32> pTimeout)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelTryLockWriteRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelUnlockWriteRWLock(s32 rwLockId)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelCancelRWLock(s32 rwLockId, vm::ptr<s32> pNumReadWaitThreads, vm::ptr<s32> pNumWriteWaitThreads, s32 flag)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceKernelGetRWLockInfo(s32 rwLockId, vm::ptr<SceKernelRWLockInfo> pInfo)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
-arm_error_code sceKernelGetThreadmgrUIDClass(s32 uid)
+error_code sceKernelGetThreadmgrUIDClass(s32 uid)
 {
 	sceLibKernel.error("sceKernelGetThreadmgrUIDClass(uid=0x%x)", uid);
 
-	if (idm::check<ARMv7Thread>(uid)) return SCE_KERNEL_THREADMGR_UID_CLASS_THREAD;
-	if (idm::check<psp2_semaphore>(uid)) return SCE_KERNEL_THREADMGR_UID_CLASS_SEMA;
-	if (idm::check<psp2_event_flag>(uid)) return SCE_KERNEL_THREADMGR_UID_CLASS_EVENT_FLAG;
-	if (idm::check<psp2_mutex>(uid)) return SCE_KERNEL_THREADMGR_UID_CLASS_MUTEX;
-	if (idm::check<psp2_cond>(uid)) return SCE_KERNEL_THREADMGR_UID_CLASS_COND;
+	if (idm::check<ARMv7Thread>(uid)) return not_an_error(SCE_KERNEL_THREADMGR_UID_CLASS_THREAD);
+	if (idm::check<psp2_semaphore>(uid)) return not_an_error(SCE_KERNEL_THREADMGR_UID_CLASS_SEMA);
+	if (idm::check<psp2_event_flag>(uid)) return not_an_error(SCE_KERNEL_THREADMGR_UID_CLASS_EVENT_FLAG);
+	if (idm::check<psp2_mutex>(uid)) return not_an_error(SCE_KERNEL_THREADMGR_UID_CLASS_MUTEX);
+	if (idm::check<psp2_cond>(uid)) return not_an_error(SCE_KERNEL_THREADMGR_UID_CLASS_COND);
 
 	return SCE_KERNEL_ERROR_INVALID_UID;
 }
@@ -1449,102 +1917,102 @@ arm_error_code sceKernelGetThreadmgrUIDClass(s32 uid)
 
 s32 sceIoRemove(vm::cptr<char> filename)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoMkdir(vm::cptr<char> dirname, s32 mode)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoRmdir(vm::cptr<char> dirname)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoRename(vm::cptr<char> oldname, vm::cptr<char> newname)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoDevctl(vm::cptr<char> devname, s32 cmd, vm::cptr<void> arg, u32 arglen, vm::ptr<void> bufp, u32 buflen)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoSync(vm::cptr<char> devname, s32 flag)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoOpen(vm::cptr<char> filename, s32 flag, s32 mode)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoClose(s32 fd)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoIoctl(s32 fd, s32 cmd, vm::cptr<void> argp, u32 arglen, vm::ptr<void> bufp, u32 buflen)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s64 sceIoLseek(s32 fd, s64 offset, s32 whence)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoLseek32(s32 fd, s32 offset, s32 whence)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoRead(s32 fd, vm::ptr<void> buf, u32 nbyte)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoWrite(s32 fd, vm::cptr<void> buf, u32 nbyte)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoPread(s32 fd, vm::ptr<void> buf, u32 nbyte, s64 offset)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoPwrite(s32 fd, vm::cptr<void> buf, u32 nbyte, s64 offset)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoDopen(vm::cptr<char> dirname)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoDclose(s32 fd)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoDread(s32 fd, vm::ptr<SceIoDirent> buf)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoChstat(vm::cptr<char> name, vm::cptr<SceIoStat> buf, u32 cbit)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 s32 sceIoGetstat(vm::cptr<char> name, vm::ptr<SceIoStat> buf)
 {
-	throw EXCEPTION("");
+	fmt::throw_exception("Unimplemented" HERE);
 }
 
 

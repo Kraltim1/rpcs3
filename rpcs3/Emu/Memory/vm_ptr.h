@@ -2,7 +2,7 @@
 
 #include "vm_ref.h"
 
-class PPUThread;
+class ppu_thread;
 class ARMv7Thread;
 
 namespace vm
@@ -60,31 +60,31 @@ namespace vm
 		}
 
 		// Get vm pointer to a struct member
-		template<typename MT, typename T2, typename = if_comparable_t<T, T2>>
+		template <typename MT, typename T2, typename = if_comparable_t<T, T2>>
 		_ptr_base<MT> ptr(MT T2::*const mptr) const
 		{
-			return vm::cast(vm::cast(m_addr, HERE) + get_offset(mptr));
+			return vm::cast(vm::cast(m_addr, HERE) + offset32(mptr));
 		}
 
 		// Get vm pointer to a struct member with array subscription
-		template<typename MT, typename T2, typename ET = std::remove_extent_t<MT>, typename = if_comparable_t<T, T2>>
+		template <typename MT, typename T2, typename ET = std::remove_extent_t<MT>, typename = if_comparable_t<T, T2>>
 		_ptr_base<ET> ptr(MT T2::*const mptr, u32 index) const
 		{
-			return vm::cast(vm::cast(m_addr, HERE) + get_offset(mptr) + SIZE_32(ET) * index);
+			return vm::cast(vm::cast(m_addr, HERE) + offset32(mptr) + SIZE_32(ET) * index);
 		}
 
 		// Get vm reference to a struct member
-		template<typename MT, typename T2, typename = if_comparable_t<T, T2>>
+		template <typename MT, typename T2, typename = if_comparable_t<T, T2>>
 		_ref_base<MT> ref(MT T2::*const mptr) const
 		{
-			return vm::cast(vm::cast(m_addr, HERE) + get_offset(mptr));
+			return vm::cast(vm::cast(m_addr, HERE) + offset32(mptr));
 		}
 
 		// Get vm reference to a struct member with array subscription
-		template<typename MT, typename T2, typename ET = std::remove_extent_t<MT>, typename = if_comparable_t<T, T2>>
+		template <typename MT, typename T2, typename ET = std::remove_extent_t<MT>, typename = if_comparable_t<T, T2>>
 		_ref_base<ET> ref(MT T2::*const mptr, u32 index) const
 		{
-			return vm::cast(vm::cast(m_addr, HERE) + get_offset(mptr) + SIZE_32(ET) * index);
+			return vm::cast(vm::cast(m_addr, HERE) + offset32(mptr) + SIZE_32(ET) * index);
 		}
 
 		// Get vm reference
@@ -96,11 +96,6 @@ namespace vm
 		T* get_ptr() const
 		{
 			return static_cast<T*>(vm::base(vm::cast(m_addr, HERE)));
-		}
-
-		T* get_ptr_priv() const
-		{
-			return static_cast<T*>(vm::base_priv(vm::cast(m_addr, HERE)));
 		}
 
 		T* operator ->() const
@@ -128,6 +123,18 @@ namespace vm
 		bool aligned() const
 		{
 			return aligned(ALIGN_32(T));
+		}
+
+		// Get type size
+		static constexpr u32 size()
+		{
+			return SIZE_32(T);
+		}
+
+		// Get type alignment
+		static constexpr u32 align()
+		{
+			return ALIGN_32(T);
 		}
 
 		// Test address for arbitrary alignment: (addr & (align - 1)) != 0
@@ -158,7 +165,7 @@ namespace vm
 
 		// Pointer difference operator
 		template<typename T2, typename AT2>
-		std::enable_if_t<std::is_object<T2>::value && std::is_same<CV T, CV T2>::value, s32> operator -(const _ptr_base<T2, AT2>& right) const
+		std::enable_if_t<std::is_object<T2>::value && std::is_same<std::decay_t<T>, std::decay_t<T2>>::value, s32> operator -(const _ptr_base<T2, AT2>& right) const
 		{
 			return static_cast<s32>(vm::cast(m_addr, HERE) - vm::cast(right.m_addr, HERE)) / SIZE_32(T);
 		}
@@ -178,7 +185,7 @@ namespace vm
 
 		_ptr_base operator --(int)
 		{
-			_ptr_base result = m_addr;
+			_ptr_base result = *this;
 			m_addr = vm::cast(m_addr, HERE) - SIZE_32(T);
 			return result;
 		}
@@ -252,7 +259,7 @@ namespace vm
 		}
 
 		// Callback; defined in PPUCallback.h, passing context is mandatory
-		RT operator()(PPUThread& ppu, T... args) const;
+		RT operator()(ppu_thread& ppu, T... args) const;
 
 		// Callback; defined in ARMv7Callback.h, passing context is mandatory
 		RT operator()(ARMv7Thread& cpu, T... args) const;
@@ -266,9 +273,11 @@ namespace vm
 
 	// Native endianness pointer to LE data
 	template<typename T, typename AT = u32> using ptrl = _ptr_base<to_le_t<T>, AT>;
+	template<typename T, typename AT = u32> using cptrl = ptrl<const T, AT>;
 
 	// Native endianness pointer to BE data
 	template<typename T, typename AT = u32> using ptrb = _ptr_base<to_be_t<T>, AT>;
+	template<typename T, typename AT = u32> using cptrb = ptrb<const T, AT>;
 
 	// BE pointer to LE data
 	template<typename T, typename AT = u32> using bptrl = _ptr_base<to_le_t<T>, to_be_t<AT>>;
@@ -286,24 +295,19 @@ namespace vm
 	{
 		// Default pointer type for PS3 HLE functions (Native endianness pointer to BE data)
 		template<typename T, typename AT = u32> using ptr = ptrb<T, AT>;
+		template<typename T, typename AT = u32> using cptr = ptr<const T, AT>;
 
 		// Default pointer to pointer type for PS3 HLE functions (Native endianness pointer to BE pointer to BE data)
 		template<typename T, typename AT = u32, typename AT2 = u32> using pptr = ptr<ptr<T, AT2>, AT>;
+		template<typename T, typename AT = u32, typename AT2 = u32> using cpptr = pptr<const T, AT, AT2>;
 
 		// Default pointer type for PS3 HLE structures (BE pointer to BE data)
 		template<typename T, typename AT = u32> using bptr = bptrb<T, AT>;
+		template<typename T, typename AT = u32> using bcptr = bptr<const T, AT>;
 
 		// Default pointer to pointer type for PS3 HLE structures (BE pointer to BE pointer to BE data)
 		template<typename T, typename AT = u32, typename AT2 = u32> using bpptr = bptr<ptr<T, AT2>, AT>;
-
-		// Native endianness pointer to const BE data
-		template<typename T, typename AT = u32> using cptr = ptr<const T, AT>;
-
-		// BE pointer to const BE data
-		template<typename T, typename AT = u32> using bcptr = bptr<const T, AT>;
-
-		template<typename T, typename AT = u32> using cpptr = pptr<const T, AT>;
-		template<typename T, typename AT = u32> using bcpptr = bpptr<const T, AT>;
+		template<typename T, typename AT = u32, typename AT2 = u32> using bcpptr = bpptr<const T, AT, AT2>;
 
 		// Perform static_cast (for example, vm::ptr<void> to vm::ptr<char>)
 		template<typename CT, typename T, typename AT, typename = decltype(static_cast<to_be_t<CT>*>(std::declval<T*>()))>
@@ -324,23 +328,18 @@ namespace vm
 	{
 		// Default pointer type for PSV HLE functions (Native endianness pointer to LE data)
 		template<typename T> using ptr = ptrl<T>;
+		template<typename T> using cptr = ptr<const T>;
 
 		// Default pointer to pointer type for PSV HLE functions (Native endianness pointer to LE pointer to LE data)
 		template<typename T> using pptr = ptr<ptr<T>>;
+		template<typename T> using cpptr = pptr<const T>;
 
 		// Default pointer type for PSV HLE structures (LE pointer to LE data)
 		template<typename T> using lptr = lptrl<T>;
+		template<typename T> using lcptr = lptr<const T>;
 
 		// Default pointer to pointer type for PSV HLE structures (LE pointer to LE pointer to LE data)
 		template<typename T> using lpptr = lptr<ptr<T>>;
-
-		// Native endianness pointer to const LE data
-		template<typename T> using cptr = ptr<const T>;
-
-		// LE pointer to const LE data
-		template<typename T> using lcptr = lptr<const T>;
-
-		template<typename T> using cpptr = pptr<const T>;
 		template<typename T> using lcpptr = lpptr<const T>;
 
 		// Perform static_cast (for example, vm::ptr<void> to vm::ptr<char>)
@@ -488,10 +487,36 @@ struct to_se<vm::_ptr_base<T, AT>, Se>
 
 // Format pointer
 template<typename T, typename AT>
-struct unveil<vm::_ptr_base<T, AT>, void>
+struct fmt_unveil<vm::_ptr_base<T, AT>, void>
 {
+	using type = vm::_ptr_base<T>; // Use only T, ignoring AT
+
 	static inline auto get(const vm::_ptr_base<T, AT>& arg)
 	{
-		return unveil<AT>::get(arg.addr());
+		return fmt_unveil<AT>::get(arg.addr());
 	}
+};
+
+template<>
+struct fmt_class_string<vm::_ptr_base<const void>, void>
+{
+	static void format(std::string& out, u64 arg);
+};
+
+template<typename T>
+struct fmt_class_string<vm::_ptr_base<T>, void> : fmt_class_string<vm::_ptr_base<const void>, void>
+{
+	// Classify all pointers as const void*
+};
+
+template<>
+struct fmt_class_string<vm::_ptr_base<const char>, void>
+{
+	static void format(std::string& out, u64 arg);
+};
+
+template<>
+struct fmt_class_string<vm::_ptr_base<char>, void> : fmt_class_string<vm::_ptr_base<const char>>
+{
+	// Classify char* as const char*
 };

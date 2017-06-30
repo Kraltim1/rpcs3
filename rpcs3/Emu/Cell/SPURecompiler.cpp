@@ -8,11 +8,15 @@
 
 extern u64 get_system_time();
 
+spu_recompiler_base::~spu_recompiler_base()
+{
+}
+
 void spu_recompiler_base::enter(SPUThread& spu)
 {
 	if (spu.pc >= 0x40000 || spu.pc % 4)
 	{
-		throw fmt::exception("Invalid PC: 0x%05x", spu.pc);
+		fmt::throw_exception("Invalid PC: 0x%05x", spu.pc);
 	}
 
 	// Get SPU LS pointer
@@ -22,9 +26,9 @@ void spu_recompiler_base::enter(SPUThread& spu)
 	const auto func = spu.spu_db->analyse(_ls, spu.pc);
 
 	// Reset callstack if necessary
-	if (func->does_reset_stack && spu.recursion_level)
+	if ((func->does_reset_stack && spu.recursion_level) || spu.recursion_level >= 128)
 	{
-		spu.state += cpu_state::ret;
+		spu.state += cpu_flag::ret;
 		return;
 	}
 
@@ -37,7 +41,7 @@ void spu_recompiler_base::enter(SPUThread& spu)
 
 		spu.spu_rec->compile(*func);
 
-		if (!func->compiled) throw std::runtime_error("Compilation failed" HERE);
+		if (!func->compiled) fmt::throw_exception("Compilation failed" HERE);
 	}
 
 	const u32 res = func->compiled(&spu, _ls);
@@ -61,7 +65,7 @@ void spu_recompiler_base::enter(SPUThread& spu)
 	{
 		if (res & 0x8000000)
 		{
-			throw std::logic_error("Invalid interrupt status set" HERE);
+			fmt::throw_exception("Invalid interrupt status set (0x%x)" HERE, res);
 		}
 
 		spu.set_interrupt_status(true);
@@ -72,4 +76,10 @@ void spu_recompiler_base::enter(SPUThread& spu)
 	}
 
 	spu.pc = res & 0x3fffc;
+
+	if ((spu.ch_event_stat & SPU_EVENT_INTR_TEST & spu.ch_event_mask) > SPU_EVENT_INTR_ENABLED)
+	{
+		spu.ch_event_stat &= ~SPU_EVENT_INTR_ENABLED;
+		spu.srr0 = std::exchange(spu.pc, 0);
+	}
 }
