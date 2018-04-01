@@ -5,6 +5,7 @@
 #include "SPUThread.h"
 #include "SPURecompiler.h"
 #include "SPUASMJITRecompiler.h"
+#include <algorithm>
 
 extern u64 get_system_time();
 
@@ -20,10 +21,17 @@ void spu_recompiler_base::enter(SPUThread& spu)
 	}
 
 	// Get SPU LS pointer
-	const auto _ls = vm::ps3::_ptr<u32>(spu.offset);
+	const auto _ls = vm::_ptr<u32>(spu.offset);
 
-	// Always validate (TODO)
-	const auto func = spu.spu_db->analyse(_ls, spu.pc);
+	// Search if cached data matches
+	auto func = spu.compiled_cache[spu.pc / 4];
+
+	// Check shared db if we dont have a match
+	if (!func || !std::equal(func->data.begin(), func->data.end(), _ls + spu.pc / 4, [](const be_t<u32>& l, const be_t<u32>& r) { return *(u32*)(u8*)&l == *(u32*)(u8*)&r; }))
+	{
+		func = spu.spu_db->analyse(_ls, spu.pc);
+		spu.compiled_cache[spu.pc / 4] = func;
+	}
 
 	// Reset callstack if necessary
 	if ((func->does_reset_stack && spu.recursion_level) || spu.recursion_level >= 128)
@@ -32,6 +40,7 @@ void spu_recompiler_base::enter(SPUThread& spu)
 		return;
 	}
 
+	// Compile if needed
 	if (!func->compiled)
 	{
 		if (!spu.spu_rec)
@@ -77,9 +86,9 @@ void spu_recompiler_base::enter(SPUThread& spu)
 
 	spu.pc = res & 0x3fffc;
 
-	if ((spu.ch_event_stat & SPU_EVENT_INTR_TEST & spu.ch_event_mask) > SPU_EVENT_INTR_ENABLED)
+	if (spu.interrupts_enabled && (spu.ch_event_mask & spu.ch_event_stat & SPU_EVENT_INTR_IMPLEMENTED) > 0)
 	{
-		spu.ch_event_stat &= ~SPU_EVENT_INTR_ENABLED;
+		spu.interrupts_enabled = false;
 		spu.srr0 = std::exchange(spu.pc, 0);
 	}
 }

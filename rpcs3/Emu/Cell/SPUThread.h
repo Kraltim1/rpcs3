@@ -59,7 +59,7 @@ enum : u32
 	SPU_EVENT_ME = 0x40,   // SPU Outbound Interrupt Mailbox available
 	SPU_EVENT_TM = 0x20,   // SPU Decrementer became negative (?)
 	SPU_EVENT_MB = 0x10,   // SPU Inbound mailbox available
-	SPU_EVENT_QV = 0x4,    // MFC SPU Command Queue available
+	SPU_EVENT_QV = 0x8,    // MFC SPU Command Queue available
 	SPU_EVENT_SN = 0x2,    // MFC List Command stall-and-notify event
 	SPU_EVENT_TG = 0x1,    // MFC Tag Group status update event
 
@@ -68,9 +68,9 @@ enum : u32
 
 	SPU_EVENT_WAITING      = 0x80000000, // Originally unused, set when SPU thread starts waiting on ch_event_stat
 	//SPU_EVENT_AVAILABLE  = 0x40000000, // Originally unused, channel count of the SPU_RdEventStat channel
-	SPU_EVENT_INTR_ENABLED = 0x20000000, // Originally unused, represents "SPU Interrupts Enabled" status
+	//SPU_EVENT_INTR_ENABLED = 0x20000000, // Originally unused, represents "SPU Interrupts Enabled" status
 
-	SPU_EVENT_INTR_TEST = SPU_EVENT_INTR_ENABLED | SPU_EVENT_INTR_IMPLEMENTED
+	SPU_EVENT_INTR_TEST = SPU_EVENT_INTR_IMPLEMENTED
 };
 
 // SPU Class 0 Interrupts
@@ -450,7 +450,7 @@ public:
 		{
 		case 0:
 			return this->_u32[3] >> 8 & 0x3;
-		
+
 		case 1:
 			return this->_u32[3] >> 10 & 0x3;
 
@@ -529,11 +529,10 @@ public:
 	// MFC command data
 	spu_mfc_cmd ch_mfc_cmd;
 
-	// MFC command queue (consumer: MFC thread)
-	lf_spsc<spu_mfc_cmd, 16> mfc_queue;
-
-	// MFC command proxy queue (consumer: MFC thread)
-	lf_mpsc<spu_mfc_cmd, 8> mfc_proxy;
+	// MFC command queue
+	spu_mfc_cmd mfc_queue[16]{};
+	u32 mfc_size = 0;
+	atomic_t<u32> mfc_prxy_mask;
 
 	// Reservation Data
 	u64 rtime = 0;
@@ -541,10 +540,10 @@ public:
 	u32 raddr = 0;
 
 	u32 srr0;
-	atomic_t<u32> ch_tag_upd;
-	atomic_t<u32> ch_tag_mask;
+	u32 ch_tag_upd;
+	u32 ch_tag_mask;
 	spu_channel_t ch_tag_stat;
-	atomic_t<u32> ch_stall_mask;
+	u32 ch_stall_mask;
 	spu_channel_t ch_stall_stat;
 	spu_channel_t ch_atomic_stat;
 
@@ -560,6 +559,7 @@ public:
 
 	atomic_t<u32> ch_event_mask;
 	atomic_t<u32> ch_event_stat;
+	atomic_t<bool> interrupts_enabled;
 
 	u64 ch_dec_start_timestamp; // timestamp of writing decrementer value
 	u32 ch_dec_value; // written decrementer value
@@ -573,7 +573,7 @@ public:
 	std::array<std::pair<u32, std::weak_ptr<lv2_event_queue>>, 32> spuq; // Event Queue Keys for SPU Thread
 	std::weak_ptr<lv2_event_queue> spup[64]; // SPU Ports
 
-	u32 pc = 0; // 
+	u32 pc = 0; //
 	const u32 index; // SPU index
 	const u32 offset; // SPU LS offset
 	lv2_spu_group* const group; // SPU Thread Group
@@ -582,14 +582,20 @@ public:
 
 	std::exception_ptr pending_exception;
 
+	std::array<struct spu_function_t*, 65536> compiled_cache{};
 	std::shared_ptr<class SPUDatabase> spu_db;
 	std::shared_ptr<class spu_recompiler_base> spu_rec;
 	u32 recursion_level = 0;
 
 	void push_snr(u32 number, u32 value);
-	void do_dma_transfer(const spu_mfc_cmd& args, bool from_mfc = true);
+	void do_dma_transfer(const spu_mfc_cmd& args);
+	bool do_dma_check(const spu_mfc_cmd& args);
+	bool do_list_transfer(spu_mfc_cmd& args);
+	bool do_putlluc(const spu_mfc_cmd& args);
+	void do_mfc();
+	u32 get_mfc_completed();
 
-	void process_mfc_cmd();
+	bool process_mfc_cmd(spu_mfc_cmd args);
 	u32 get_events(bool waiting = false);
 	void set_events(u32 mask);
 	void set_interrupt_status(bool enable);

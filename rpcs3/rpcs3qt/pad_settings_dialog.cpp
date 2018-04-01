@@ -5,550 +5,504 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QAction>
-#include <QButtonGroup>
+#include <QPainter>
 
-#include "stdafx.h"
+#include "qt_utils.h"
 #include "pad_settings_dialog.h"
+#include "ui_pad_settings_dialog.h"
 
-// TODO: rewrite with std::chrono or QTimer
-#include <time.h>
+inline std::string sstr(const QString& _in) { return _in.toStdString(); }
+constexpr auto qstr = QString::fromStdString;
 
-static const int PadButtonWidth = 60;
-
-extern keyboard_pad_config g_kbpad_config;
-
-pad_settings_dialog::pad_settings_dialog(QWidget *parent) : QDialog(parent)
+pad_settings_dialog::pad_settings_dialog(const std::string& device, const std::string& profile, std::shared_ptr<PadHandlerBase> handler, QWidget *parent)
+	: QDialog(parent), ui(new Ui::pad_settings_dialog), m_device_name(device), m_handler(handler), m_handler_type(handler->m_type)
 {
-	// Left Analog Stick
-	QGroupBox *roundStickL = new QGroupBox(tr("Left Analog Stick"));
-	QVBoxLayout *roundStickLMainVBox = new QVBoxLayout;
-	QVBoxLayout *roundStickLVBox = new QVBoxLayout;
-	QHBoxLayout *roundStickLHBox1 = new QHBoxLayout;
-	QHBoxLayout *roundStickLHBox2 = new QHBoxLayout;
-	QHBoxLayout *roundStickLHBox3 = new QHBoxLayout;
-	b_up_lstick = new QPushButton(tr("W"));
-	b_left_lstick = new QPushButton(tr("A"));
-	b_right_lstick = new QPushButton(tr("D"));
-	b_down_lstick = new QPushButton(tr("S"));
-	roundStickLHBox1->addWidget(b_up_lstick);
-	roundStickLHBox2->addWidget(b_left_lstick);
-	roundStickLHBox2->addWidget(b_right_lstick);
-	roundStickLHBox3->addWidget(b_down_lstick);
-	roundStickLVBox->addLayout(roundStickLHBox1);
-	roundStickLVBox->addLayout(roundStickLHBox2);
-	roundStickLVBox->addLayout(roundStickLHBox3);
-	roundStickL->setLayout(roundStickLVBox);
-	roundStickLMainVBox->addWidget(roundStickL);
-	roundStickLMainVBox->addStretch();
-	b_up_lstick->setFixedWidth(PadButtonWidth);
-	b_left_lstick->setFixedWidth(PadButtonWidth);
-	b_right_lstick->setFixedWidth(PadButtonWidth);
-	b_down_lstick->setFixedWidth(PadButtonWidth);
+	ui->setupUi(this);
 
-	// D-Pad
-	QGroupBox *roundPadControls = new QGroupBox(tr("D-Pad"));
-	QVBoxLayout *roundPadControlsMainVBox = new QVBoxLayout;
-	QVBoxLayout *roundPadControlsVBox = new QVBoxLayout;
-	QHBoxLayout *roundPadControlsHBox1 = new QHBoxLayout;
-	QHBoxLayout *roundPadControlsHBox2 = new QHBoxLayout;
-	QHBoxLayout *roundPadControlsHBox3 = new QHBoxLayout;
-	b_up = new QPushButton(tr("Up"));
-	b_left = new QPushButton(tr("Left"));
-	b_right = new QPushButton(tr("Right"));
-	b_down = new QPushButton(tr("Down"));
-	roundPadControlsHBox1->addWidget(b_up);
-	roundPadControlsHBox2->addWidget(b_left);
-	roundPadControlsHBox2->addWidget(b_right);
-	roundPadControlsHBox3->addWidget(b_down);
-	roundPadControlsVBox->addLayout(roundPadControlsHBox1);
-	roundPadControlsVBox->addLayout(roundPadControlsHBox2);
-	roundPadControlsVBox->addLayout(roundPadControlsHBox3);
-	roundPadControls->setLayout(roundPadControlsVBox);
-	roundPadControlsMainVBox->addWidget(roundPadControls);
-	roundPadControlsMainVBox->addStretch();
-	b_up->setFixedWidth(PadButtonWidth);
-	b_left->setFixedWidth(PadButtonWidth);
-	b_right->setFixedWidth(PadButtonWidth);
-	b_down->setFixedWidth(PadButtonWidth);
-	
-	// Left Shifts
-	QGroupBox *roundPadShiftsL = new QGroupBox(tr("Left Shifts"));
-	QGroupBox *roundPadL1 = new QGroupBox(tr("L1"));
-	QGroupBox *roundPadL2 = new QGroupBox(tr("L2"));
-	QGroupBox *roundPadL3 = new QGroupBox(tr("L3"));
-	QVBoxLayout *roundPadShiftsLVbox = new QVBoxLayout;
-	QVBoxLayout *roundPadL1Vbox = new QVBoxLayout;
-	QVBoxLayout *roundPadL2Vbox = new QVBoxLayout;
-	QVBoxLayout *roundPadL3Vbox = new QVBoxLayout;
-	b_shift_l1 = new QPushButton(tr("Q"));
-	b_shift_l2 = new QPushButton(tr("R"));
-	b_shift_l3 = new QPushButton(tr("F"));
-	roundPadL1Vbox->addWidget(b_shift_l1);
-	roundPadL2Vbox->addWidget(b_shift_l2);
-	roundPadL3Vbox->addWidget(b_shift_l3);
-	roundPadL1->setLayout(roundPadL1Vbox);
-	roundPadL2->setLayout(roundPadL2Vbox);
-	roundPadL3->setLayout(roundPadL3Vbox);
-	roundPadShiftsLVbox->addWidget(roundPadL1);
-	roundPadShiftsLVbox->addWidget(roundPadL2);
-	roundPadShiftsLVbox->addWidget(roundPadL3);
-	roundPadShiftsL->setLayout(roundPadShiftsLVbox);
-	b_shift_l1->setFixedWidth(PadButtonWidth);
-	b_shift_l2->setFixedWidth(PadButtonWidth);
-	b_shift_l3->setFixedWidth(PadButtonWidth);
+	ui->b_cancel->setDefault(true);
+	connect(ui->b_cancel, &QAbstractButton::clicked, this, &QWidget::close);
 
-	// Start / Select
-	QGroupBox *roundPadSystem = new QGroupBox(tr("System"));
-	QGroupBox *roundPadSelect = new QGroupBox(tr("Select"));
-	QGroupBox *roundPadStart = new QGroupBox(tr("Start"));
-	QVBoxLayout *roundPadSystemMainVbox = new QVBoxLayout;
-	QVBoxLayout *roundPadSystemVbox = new QVBoxLayout;
-	QVBoxLayout *roundPadSelectVbox = new QVBoxLayout;
-	QVBoxLayout *roundPadStartVbox = new QVBoxLayout;
-	b_select = new QPushButton(tr("Space"));
-	b_start = new QPushButton(tr("Enter"));
-	roundPadSelectVbox->addWidget(b_select);
-	roundPadStartVbox->addWidget(b_start);
-	roundPadSelect->setLayout(roundPadSelectVbox);
-	roundPadStart->setLayout(roundPadStartVbox);
-	roundPadSystemVbox->addWidget(roundPadSelect);
-	roundPadSystemVbox->addWidget(roundPadStart);
-	roundPadSystem->setLayout(roundPadSystemVbox);
-	roundPadSystemMainVbox->addWidget(roundPadSystem);
-	roundPadSystemMainVbox->addStretch();
-	b_select->setFixedWidth(PadButtonWidth);
-	b_start->setFixedWidth(PadButtonWidth);
+	m_padButtons = new QButtonGroup(this);
+	m_palette = ui->b_left->palette(); // save normal palette
 
-	// Right Shifts
-	QGroupBox *roundPadShiftsR = new QGroupBox(tr("Right Shifts"));
-	QGroupBox *roundPadR1 = new QGroupBox(tr("R1"));
-	QGroupBox *roundPadR2 = new QGroupBox(tr("R2"));
-	QGroupBox *roundPadR3 = new QGroupBox(tr("R3"));
-	QVBoxLayout *roundPadShiftsRVbox = new QVBoxLayout;
-	QVBoxLayout *roundPadR1Vbox = new QVBoxLayout;
-	QVBoxLayout *roundPadR2Vbox = new QVBoxLayout;
-	QVBoxLayout *roundPadR3Vbox = new QVBoxLayout;
-	b_shift_r1 = new QPushButton(tr("E"));
-	b_shift_r2 = new QPushButton(tr("T"));
-	b_shift_r3 = new QPushButton(tr("G"));
-	roundPadR1Vbox->addWidget(b_shift_r1);
-	roundPadR2Vbox->addWidget(b_shift_r2);
-	roundPadR3Vbox->addWidget(b_shift_r3);
-	roundPadR1->setLayout(roundPadR1Vbox);
-	roundPadR2->setLayout(roundPadR2Vbox);
-	roundPadR3->setLayout(roundPadR3Vbox);
-	roundPadShiftsRVbox->addWidget(roundPadR1);
-	roundPadShiftsRVbox->addWidget(roundPadR2);
-	roundPadShiftsRVbox->addWidget(roundPadR3);
-	roundPadShiftsR->setLayout(roundPadShiftsRVbox);
-	b_shift_r1->setFixedWidth(PadButtonWidth);
-	b_shift_r2->setFixedWidth(PadButtonWidth);
-	b_shift_r3->setFixedWidth(PadButtonWidth);
+	std::string cfg_name = PadHandlerBase::get_config_dir(m_handler_type) + profile + ".yml";
 
-	// Action buttons
-	QGroupBox *roundpad_buttons = new QGroupBox(tr("Buttons"));
-	QGroupBox *roundPadSquare = new QGroupBox(tr("Square"));
-	QGroupBox *roundPadCross = new QGroupBox(tr("Cross"));
-	QGroupBox *roundPadCircle = new QGroupBox(tr("Circle"));
-	QGroupBox *roundPadTriangle = new QGroupBox(tr("Triangle"));
-	QVBoxLayout *roundpad_buttonsVBox = new QVBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox1 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox2 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox3 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox21 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox22 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox23 = new QHBoxLayout;
-	QHBoxLayout *roundpad_buttonsHBox24 = new QHBoxLayout;
-	b_triangle = new QPushButton(tr("V"));
-	b_square = new QPushButton(tr("Z"));
-	b_circle = new QPushButton(tr("C"));
-	b_cross = new QPushButton(tr("X"));
-	roundpad_buttonsHBox21->addWidget(b_triangle);
-	roundpad_buttonsHBox22->addWidget(b_square);
-	roundpad_buttonsHBox23->addWidget(b_circle);
-	roundpad_buttonsHBox24->addWidget(b_cross);
-	roundPadTriangle->setLayout(roundpad_buttonsHBox21);
-	roundPadSquare->setLayout(roundpad_buttonsHBox22);
-	roundPadCircle->setLayout(roundpad_buttonsHBox23);
-	roundPadCross->setLayout(roundpad_buttonsHBox24);
-	roundpad_buttonsHBox1->addStretch();
-	roundpad_buttonsHBox1->addWidget(roundPadTriangle);
-	roundpad_buttonsHBox1->addStretch();
-	roundpad_buttonsHBox2->addWidget(roundPadSquare);
-	roundpad_buttonsHBox2->addWidget(roundPadCircle);
-	roundpad_buttonsHBox3->addStretch();
-	roundpad_buttonsHBox3->addWidget(roundPadCross);
-	roundpad_buttonsHBox3->addStretch();
-	roundpad_buttonsVBox->addLayout(roundpad_buttonsHBox1);
-	roundpad_buttonsVBox->addLayout(roundpad_buttonsHBox2);
-	roundpad_buttonsVBox->addLayout(roundpad_buttonsHBox3);
-	roundpad_buttons->setLayout(roundpad_buttonsVBox);
-	b_triangle->setFixedWidth(PadButtonWidth);
-	b_square->setFixedWidth(PadButtonWidth);
-	b_circle->setFixedWidth(PadButtonWidth);
-	b_cross->setFixedWidth(PadButtonWidth);
+	// Adjust to the different pad handlers
+	if (m_handler_type == pad_handler::keyboard)
+	{
+		setWindowTitle(tr("Configure Keyboard"));
+		ui->b_blacklist->setEnabled(false);
+		((keyboard_pad_handler*)m_handler.get())->init_config(&m_handler_cfg, cfg_name);
+	}
+	else if (m_handler_type == pad_handler::ds4)
+	{
+		setWindowTitle(tr("Configure DS4"));
+		((ds4_pad_handler*)m_handler.get())->init_config(&m_handler_cfg, cfg_name);
+	}
+#ifdef _MSC_VER
+	else if (m_handler_type == pad_handler::xinput)
+	{
+		setWindowTitle(tr("Configure XInput"));
+		((xinput_pad_handler*)m_handler.get())->init_config(&m_handler_cfg, cfg_name);
+	}
+#endif
+#ifdef _WIN32
+	else if (m_handler_type == pad_handler::mm)
+	{
+		setWindowTitle(tr("Configure MMJoystick"));
+		((mm_joystick_handler*)m_handler.get())->init_config(&m_handler_cfg, cfg_name);
+	}
+#endif
+#ifdef HAVE_LIBEVDEV
+	else if (m_handler_type == pad_handler::evdev)
+	{
+		setWindowTitle(tr("Configure evdev"));
+		((evdev_joystick_handler*)m_handler.get())->init_config(&m_handler_cfg, cfg_name);
+	}
+#endif
 
-	// Right Analog Stick
-	QGroupBox *roundStickR = new QGroupBox(tr("Right Analog Stick"));
-	QVBoxLayout *roundStickRMainVBox = new QVBoxLayout;
-	QVBoxLayout *roundStickRVBox = new QVBoxLayout;
-	QHBoxLayout *roundStickRHBox1 = new QHBoxLayout;
-	QHBoxLayout *roundStickRHBox2 = new QHBoxLayout;
-	QHBoxLayout *roundStickRHBox3 = new QHBoxLayout;
-	b_up_rstick = new QPushButton(tr("PgUp"));
-	b_left_rstick = new QPushButton(tr("Home"));
-	b_right_rstick = new QPushButton(tr("End"));
-	b_down_rstick = new QPushButton(tr("PgDown"));
-	roundStickRHBox1->addWidget(b_up_rstick);
-	roundStickRHBox2->addWidget(b_left_rstick);
-	roundStickRHBox2->addWidget(b_right_rstick);
-	roundStickRHBox3->addWidget(b_down_rstick);
-	roundStickRVBox->addLayout(roundStickRHBox1);
-	roundStickRVBox->addLayout(roundStickRHBox2);
-	roundStickRVBox->addLayout(roundStickRHBox3);
-	roundStickR->setLayout(roundStickRVBox);
-	roundStickRMainVBox->addWidget(roundStickR);
-	roundStickRMainVBox->addStretch();
-	b_up_rstick->setFixedWidth(PadButtonWidth);
-	b_left_rstick->setFixedWidth(PadButtonWidth);
-	b_right_rstick->setFixedWidth(PadButtonWidth);
-	b_down_rstick->setFixedWidth(PadButtonWidth);
+	m_handler_cfg.load();
 
-	// Buttons
-	b_reset = new QPushButton(tr("By default"));
-	
-	b_ok = new QPushButton(tr("OK"));
+	ui->chb_vibration_large->setChecked((bool)m_handler_cfg.enable_vibration_motor_large);
+	ui->chb_vibration_small->setChecked((bool)m_handler_cfg.enable_vibration_motor_small);
+	ui->chb_vibration_switch->setChecked((bool)m_handler_cfg.switch_vibration_motors);
 
-	b_cancel = new QPushButton(tr("Cancel"));
-	b_cancel->setDefault(true);
-	connect(b_cancel, &QAbstractButton::clicked, this, &QWidget::close);
+	// Enable Button Remapping
+	if (m_handler->has_config())
+	{
+		// Use timer to get button input
+		const auto& callback = [=](u16 val, std::string name, int preview_values[6])
+		{
+			if (m_handler->has_deadzones())
+			{
+				ui->preview_trigger_left->setValue(preview_values[0]);
+				ui->preview_trigger_right->setValue(preview_values[1]);
 
-	// Handling
-	QButtonGroup *padButtons = new QButtonGroup(this);
-	padButtons->addButton(b_left_lstick, 1);
-	padButtons->addButton(b_down_lstick, 2);
-	padButtons->addButton(b_right_lstick, 3);
-	padButtons->addButton(b_up_lstick, 4);
-	
-	padButtons->addButton(b_left, 5);
-	padButtons->addButton(b_down, 6);
-	padButtons->addButton(b_right, 7);
-	padButtons->addButton(b_up, 8);
-	
-	padButtons->addButton(b_shift_l1, 9);
-	padButtons->addButton(b_shift_l2, 10);
-	padButtons->addButton(b_shift_l3, 11);
-	
-	padButtons->addButton(b_start, 12);
-	padButtons->addButton(b_select, 13);
-	
-	padButtons->addButton(b_shift_r1, 14);
-	padButtons->addButton(b_shift_r2, 15);
-	padButtons->addButton(b_shift_r3, 16);
-	
-	padButtons->addButton(b_square, 17);
-	padButtons->addButton(b_cross, 18);
-	padButtons->addButton(b_circle, 19);
-	padButtons->addButton(b_triangle, 20);
-	
-	padButtons->addButton(b_left_rstick, 21);
-	padButtons->addButton(b_down_rstick, 22);
-	padButtons->addButton(b_right_rstick, 23);
-	padButtons->addButton(b_up_rstick, 24);
-	
-	padButtons->addButton(b_reset, 25);
-	padButtons->addButton(b_ok, 26);
-	padButtons->addButton(b_cancel, 27);
+				if (lx != preview_values[2] || ly != preview_values[3])
+				{
+					lx = preview_values[2], ly = preview_values[3];
+					RepaintPreviewLabel(ui->preview_stick_left, ui->slider_stick_left->value(), ui->slider_stick_left->size().width(), lx, ly);
+				}
+				if (rx != preview_values[4] || ry != preview_values[5])
+				{
+					rx = preview_values[4], ry = preview_values[5];
+					RepaintPreviewLabel(ui->preview_stick_right, ui->slider_stick_right->value(), ui->slider_stick_right->size().width(), rx, ry);
+				}
+			}
 
-	connect(padButtons, SIGNAL(buttonClicked(int)), this, SLOT(OnPadButtonClicked(int)));
+			if (val <= 0) return;
 
-	// Main layout
-	QHBoxLayout *hbox1 = new QHBoxLayout;
-	hbox1->addLayout(roundStickLMainVBox);
-	hbox1->addLayout(roundPadControlsMainVBox);
-	hbox1->addWidget(roundPadShiftsL);
-	hbox1->addLayout(roundPadSystemMainVbox);
-	hbox1->addWidget(roundPadShiftsR);
-	hbox1->addWidget(roundpad_buttons);
-	hbox1->addLayout(roundStickRMainVBox);
+			LOG_NOTICE(HLE, "GetNextButtonPress: %s button %s pressed with value %d", m_handler_type, name, val);
+			if (m_button_id > button_ids::id_pad_begin && m_button_id < button_ids::id_pad_end)
+			{
+				m_cfg_entries[m_button_id].key = name;
+				m_cfg_entries[m_button_id].text = qstr(name);
+				ReactivateButtons();
+			}
+		};
 
-	QHBoxLayout *hbox2 = new QHBoxLayout;
-	hbox2->addWidget(b_reset);
-	hbox2->addStretch();
-	hbox2->addWidget(b_ok);
-	hbox2->addWidget(b_cancel);
+		connect(&m_timer_input, &QTimer::timeout, [=]()
+		{
+			std::vector<std::string> buttons =
+			{
+				m_cfg_entries[button_ids::id_pad_l2].key,
+				m_cfg_entries[button_ids::id_pad_r2].key,
+				m_cfg_entries[button_ids::id_pad_lstick_left].key,
+				m_cfg_entries[button_ids::id_pad_lstick_right].key,
+				m_cfg_entries[button_ids::id_pad_lstick_down].key,
+				m_cfg_entries[button_ids::id_pad_lstick_up].key,
+				m_cfg_entries[button_ids::id_pad_rstick_left].key,
+				m_cfg_entries[button_ids::id_pad_rstick_right].key,
+				m_cfg_entries[button_ids::id_pad_rstick_down].key,
+				m_cfg_entries[button_ids::id_pad_rstick_up].key
+			};
+			m_handler->GetNextButtonPress(m_device_name, callback, false, buttons);
+		});
 
-	QVBoxLayout *vbox = new QVBoxLayout;
-	vbox->addLayout(hbox1);
-	vbox->addLayout(hbox2);
-	setLayout(vbox);
+		m_timer_input.start(1);
+	};
 
-	setWindowTitle(tr("Input Settings"));
+	// Enable Vibration Checkboxes
+	if (m_handler->has_rumble())
+	{
+		const s32 min_force = m_handler->vibration_min;
+		const s32 max_force = m_handler->vibration_max;
 
-	g_kbpad_config.load();
+		ui->chb_vibration_large->setEnabled(true);
+		ui->chb_vibration_small->setEnabled(true);
+		ui->chb_vibration_switch->setEnabled(true);
+
+		connect(ui->chb_vibration_large, &QCheckBox::clicked, [=](bool checked)
+		{
+			if (!checked) return;
+
+			ui->chb_vibration_switch->isChecked() ? m_handler->TestVibration(m_device_name, min_force, max_force)
+				: m_handler->TestVibration(m_device_name, max_force, min_force);
+
+			QTimer::singleShot(300, [=]()
+			{
+				m_handler->TestVibration(m_device_name, min_force, min_force);
+			});
+		});
+
+		connect(ui->chb_vibration_small, &QCheckBox::clicked, [=](bool checked)
+		{
+			if (!checked) return;
+
+			ui->chb_vibration_switch->isChecked() ? m_handler->TestVibration(m_device_name, max_force, min_force)
+				: m_handler->TestVibration(m_device_name, min_force, max_force);
+
+			QTimer::singleShot(300, [=]()
+			{
+				m_handler->TestVibration(m_device_name, min_force, min_force);
+			});
+		});
+
+		connect(ui->chb_vibration_switch, &QCheckBox::clicked, [=](bool checked)
+		{
+			checked ? m_handler->TestVibration(m_device_name, min_force, max_force)
+				: m_handler->TestVibration(m_device_name, max_force, min_force);
+
+			QTimer::singleShot(200, [=]()
+			{
+				checked ? m_handler->TestVibration(m_device_name, max_force, min_force)
+					: m_handler->TestVibration(m_device_name, min_force, max_force);
+
+				QTimer::singleShot(200, [=]()
+				{
+					m_handler->TestVibration(m_device_name, min_force, min_force);
+				});
+			});
+		});
+	}
+	else
+	{
+		ui->verticalLayout_left->removeWidget(ui->gb_vibration);
+		delete ui->gb_vibration;
+	}
+
+	// Enable Deadzone Settings
+	if (m_handler->has_deadzones())
+	{
+		auto initSlider = [=](QSlider* slider, const s32& value, const s32& min, const s32& max)
+		{
+			slider->setEnabled(true);
+			slider->setRange(min, max);
+			slider->setValue(value);
+		};
+
+		// Enable Trigger Thresholds
+		initSlider(ui->slider_trigger_left, m_handler_cfg.ltriggerthreshold, 0, m_handler->trigger_max);
+		initSlider(ui->slider_trigger_right, m_handler_cfg.rtriggerthreshold, 0, m_handler->trigger_max);
+		ui->preview_trigger_left->setRange(0, m_handler->trigger_max);
+		ui->preview_trigger_right->setRange(0, m_handler->trigger_max);
+
+		// Enable Stick Deadzones
+		initSlider(ui->slider_stick_left, m_handler_cfg.lstickdeadzone, 0, m_handler->thumb_max);
+		initSlider(ui->slider_stick_right, m_handler_cfg.rstickdeadzone, 0, m_handler->thumb_max);
+
+		RepaintPreviewLabel(ui->preview_stick_left, ui->slider_stick_left->value(), ui->slider_stick_left->size().width(), lx, ly);
+		connect(ui->slider_stick_left, &QSlider::valueChanged, [&](int value)
+		{
+			RepaintPreviewLabel(ui->preview_stick_left, value, ui->slider_stick_left->size().width(), lx, ly);
+		});
+
+		RepaintPreviewLabel(ui->preview_stick_right, ui->slider_stick_right->value(), ui->slider_stick_right->size().width(), rx, ry);
+		connect(ui->slider_stick_right, &QSlider::valueChanged, [&](int value)
+		{
+			RepaintPreviewLabel(ui->preview_stick_right, value, ui->slider_stick_right->size().width(), rx, ry);
+		});
+	}
+	else
+	{
+		ui->verticalLayout_right->removeWidget(ui->gb_sticks);
+		ui->verticalLayout_left->removeWidget(ui->gb_triggers);
+
+		delete ui->gb_sticks;
+		delete ui->gb_triggers;
+	}
+
+	auto insertButton = [this](int id, QPushButton* button, cfg::string* cfg_name)
+	{
+		QString name = qstr(*cfg_name);
+		m_cfg_entries.insert(std::make_pair(id, pad_button{ cfg_name, *cfg_name, name }));
+		m_padButtons->addButton(button, id);
+		button->setText(name);
+		button->installEventFilter(this);
+	};
+
+	insertButton(button_ids::id_pad_lstick_left,  ui->b_lstick_left,  &m_handler_cfg.ls_left);
+	insertButton(button_ids::id_pad_lstick_down,  ui->b_lstick_down,  &m_handler_cfg.ls_down);
+	insertButton(button_ids::id_pad_lstick_right, ui->b_lstick_right, &m_handler_cfg.ls_right);
+	insertButton(button_ids::id_pad_lstick_up,    ui->b_lstick_up,    &m_handler_cfg.ls_up);
+
+	insertButton(button_ids::id_pad_left,  ui->b_left,  &m_handler_cfg.left);
+	insertButton(button_ids::id_pad_down,  ui->b_down,  &m_handler_cfg.down);
+	insertButton(button_ids::id_pad_right, ui->b_right, &m_handler_cfg.right);
+	insertButton(button_ids::id_pad_up,    ui->b_up,    &m_handler_cfg.up);
+
+	insertButton(button_ids::id_pad_l1, ui->b_shift_l1, &m_handler_cfg.l1);
+	insertButton(button_ids::id_pad_l2, ui->b_shift_l2, &m_handler_cfg.l2);
+	insertButton(button_ids::id_pad_l3, ui->b_shift_l3, &m_handler_cfg.l3);
+
+	insertButton(button_ids::id_pad_start,  ui->b_start,  &m_handler_cfg.start);
+	insertButton(button_ids::id_pad_select, ui->b_select, &m_handler_cfg.select);
+	insertButton(button_ids::id_pad_ps,     ui->b_ps,     &m_handler_cfg.ps);
+
+	insertButton(button_ids::id_pad_r1, ui->b_shift_r1, &m_handler_cfg.r1);
+	insertButton(button_ids::id_pad_r2, ui->b_shift_r2, &m_handler_cfg.r2);
+	insertButton(button_ids::id_pad_r3, ui->b_shift_r3, &m_handler_cfg.r3);
+
+	insertButton(button_ids::id_pad_square,   ui->b_square,   &m_handler_cfg.square);
+	insertButton(button_ids::id_pad_cross,    ui->b_cross,    &m_handler_cfg.cross);
+	insertButton(button_ids::id_pad_circle,   ui->b_circle,   &m_handler_cfg.circle);
+	insertButton(button_ids::id_pad_triangle, ui->b_triangle, &m_handler_cfg.triangle);
+
+	insertButton(button_ids::id_pad_rstick_left,  ui->b_rstick_left,  &m_handler_cfg.rs_left);
+	insertButton(button_ids::id_pad_rstick_down,  ui->b_rstick_down,  &m_handler_cfg.rs_down);
+	insertButton(button_ids::id_pad_rstick_right, ui->b_rstick_right, &m_handler_cfg.rs_right);
+	insertButton(button_ids::id_pad_rstick_up,    ui->b_rstick_up,    &m_handler_cfg.rs_up);
+
+	m_padButtons->addButton(ui->b_reset,     button_ids::id_reset_parameters);
+	m_padButtons->addButton(ui->b_blacklist, button_ids::id_blacklist);
+	m_padButtons->addButton(ui->b_ok,        button_ids::id_ok);
+	m_padButtons->addButton(ui->b_cancel,    button_ids::id_cancel);
+
+	connect(m_padButtons, static_cast<void(QButtonGroup::*)(int)>(&QButtonGroup::buttonClicked), this, &pad_settings_dialog::OnPadButtonClicked);
+
+	connect(&m_timer, &QTimer::timeout, [&]()
+	{
+		if (--m_seconds <= 0)
+		{
+			ReactivateButtons();
+			return;
+		}
+		m_padButtons->button(m_button_id)->setText(tr("[ Waiting %1 ]").arg(m_seconds));
+	});
+
 	UpdateLabel();
+
+	// repaint and resize controller image
+	ui->l_controller->setPixmap(gui::utils::get_colorized_pixmap(*ui->l_controller->pixmap(), QColor(), gui::utils::get_label_color("l_controller"), false, true));
+	ui->l_controller->setMaximumSize(ui->gb_description->sizeHint().width(), ui->l_controller->maximumHeight() * ui->gb_description->sizeHint().width() / ui->l_controller->maximumWidth());
+
+	layout()->setSizeConstraint(QLayout::SetFixedSize);
+}
+
+pad_settings_dialog::~pad_settings_dialog()
+{
+	delete ui;
+}
+
+void pad_settings_dialog::ReactivateButtons()
+{
+	m_timer.stop();
+	m_seconds = MAX_SECONDS;
+
+	if (m_button_id == button_ids::id_pad_begin)
+	{
+		return;
+	}
+
+	if (m_padButtons->button(m_button_id))
+	{
+		m_padButtons->button(m_button_id)->setPalette(m_palette);
+	}
+
+	m_button_id = button_ids::id_pad_begin;
+	UpdateLabel();
+	SwitchButtons(true);
+
+	for (auto but : m_padButtons->buttons())
+	{
+		but->setFocusPolicy(Qt::StrongFocus);
+	}
+}
+
+void pad_settings_dialog::RepaintPreviewLabel(QLabel* l, int dz, int w, int x, int y)
+{
+	int max = m_handler->thumb_max;
+	int origin = w * 0.1;
+	int width = w * 0.8;
+	int dz_width = width * dz / max;
+	int dz_origin = (w - dz_width) / 2;
+
+	x = (w + (x * width / max)) / 2;
+	y = (w + (y * -1 * width / max)) / 2;
+
+	QPixmap pm(w, w);
+	pm.fill(Qt::transparent);
+	QPainter p(&pm);
+	p.setRenderHint(QPainter::Antialiasing, true);
+	QPen pen(Qt::black, 2);
+	p.setPen(pen);
+	QBrush brush(Qt::white);
+	p.setBrush(brush);
+	p.drawEllipse(origin, origin, width, width);
+	pen = QPen(Qt::red, 2);
+	p.setPen(pen);
+	p.drawEllipse(dz_origin, dz_origin, dz_width, dz_width);
+	pen = QPen(Qt::blue, 2);
+	p.setPen(pen);
+	p.drawEllipse(x, y, 1, 1);
+	l->setPixmap(pm);
 }
 
 void pad_settings_dialog::keyPressEvent(QKeyEvent *keyEvent)
 {
-	m_key_pressed = true;
-
-	cfg::int32* entry = nullptr;
-
-	switch (m_button_id)
+	if (m_handler_type != pad_handler::keyboard)
 	{
-	case id_pad_lstick_left: entry = &g_kbpad_config.left_stick_left; break;
-	case id_pad_lstick_down: entry = &g_kbpad_config.left_stick_down; break;
-	case id_pad_lstick_right: entry = &g_kbpad_config.left_stick_right; break;
-	case id_pad_lstick_up: entry = &g_kbpad_config.left_stick_up; break;
-	
-	case id_pad_left: entry = &g_kbpad_config.left; break;
-	case id_pad_down: entry = &g_kbpad_config.down; break;
-	case id_pad_right: entry = &g_kbpad_config.right; break;
-	case id_pad_up: entry = &g_kbpad_config.up; break;
-	
-	case id_pad_l1: entry = &g_kbpad_config.l1; break;
-	case id_pad_l2: entry = &g_kbpad_config.l2; break;
-	case id_pad_l3: entry = &g_kbpad_config.l3; break;
-	
-	case id_pad_start: entry = &g_kbpad_config.start; break;
-	case id_pad_select: entry = &g_kbpad_config.select; break;
-	
-	case id_pad_r1: entry = &g_kbpad_config.r1; break;
-	case id_pad_r2: entry = &g_kbpad_config.r2; break;
-	case id_pad_r3: entry = &g_kbpad_config.r3; break;
-	
-	case id_pad_square: entry = &g_kbpad_config.square; break;
-	case id_pad_cross: entry = &g_kbpad_config.cross; break;
-	case id_pad_circle: entry = &g_kbpad_config.circle; break;
-	case id_pad_triangle: entry = &g_kbpad_config.triangle; break;
-	case id_pad_rstick_left: entry = &g_kbpad_config.right_stick_left; break;
-	case id_pad_rstick_down: entry = &g_kbpad_config.right_stick_down; break;
-	case id_pad_rstick_right: entry = &g_kbpad_config.right_stick_right; break;
-	case id_pad_rstick_up: entry = &g_kbpad_config.right_stick_up; break;
-
-	case 0: break;
-	default: LOG_ERROR(HLE, "Unknown button ID: %d", m_button_id); break;
+		return;
 	}
 
-	if (entry)
+	if (m_button_id == button_ids::id_pad_begin)
 	{
-		// TODO: do not modify config
-		entry->from_string(std::to_string(keyEvent->key()));
+		return;
 	}
 
-	SwitchButtons(true);  // enable all buttons
-	m_button_id = 0; // reset current button id
-	m_key_pressed = false;
-	UpdateLabel();
-}
-
-void pad_settings_dialog::UpdateLabel()
-{
-	// Get button labels from .ini
-	b_up_lstick->setText(GetKeyName(g_kbpad_config.left_stick_up));
-	b_down_lstick->setText(GetKeyName(g_kbpad_config.left_stick_down));
-	b_left_lstick->setText(GetKeyName(g_kbpad_config.left_stick_left));
-	b_right_lstick->setText(GetKeyName(g_kbpad_config.left_stick_right));
-	
-	b_up->setText(GetKeyName(g_kbpad_config.up));
-	b_down->setText(GetKeyName(g_kbpad_config.down));
-	b_left->setText(GetKeyName(g_kbpad_config.left));
-	b_right->setText(GetKeyName(g_kbpad_config.right));
-	
-	b_shift_l1->setText(GetKeyName(g_kbpad_config.l1));
-	b_shift_l2->setText(GetKeyName(g_kbpad_config.l2));
-	b_shift_l3->setText(GetKeyName(g_kbpad_config.l3));
-	
-	b_start->setText(GetKeyName(g_kbpad_config.start));
-	b_select->setText(GetKeyName(g_kbpad_config.select));
-	
-	b_shift_r1->setText(GetKeyName(g_kbpad_config.r1));
-	b_shift_r2->setText(GetKeyName(g_kbpad_config.r2));
-	b_shift_r3->setText(GetKeyName(g_kbpad_config.r3));
-	
-	b_square->setText(GetKeyName(g_kbpad_config.square));
-	b_cross->setText(GetKeyName(g_kbpad_config.cross));
-	b_circle->setText(GetKeyName(g_kbpad_config.circle));
-	b_triangle->setText(GetKeyName(g_kbpad_config.triangle));
-	
-	b_up_rstick->setText(GetKeyName(g_kbpad_config.right_stick_up));
-	b_down_rstick->setText(GetKeyName(g_kbpad_config.right_stick_down));
-	b_left_rstick->setText(GetKeyName(g_kbpad_config.right_stick_left));
-	b_right_rstick->setText(GetKeyName(g_kbpad_config.right_stick_right));
-}
-
-void pad_settings_dialog::UpdateTimerLabel(const u32 id)
-{
-	// Lambda used to update label. The 47 is magical.
-	auto UpdateLabel = [=](QPushButton* target) {
-		target->setText(QString::number(m_seconds + 47));
-	};
-
-	switch (id)
+	if (m_button_id <= button_ids::id_pad_begin || m_button_id >= button_ids::id_pad_end)
 	{
-	case id_pad_lstick_left: UpdateLabel(b_left_lstick); break;
-	case id_pad_lstick_down: UpdateLabel(b_down_lstick); break;
-	case id_pad_lstick_right: UpdateLabel(b_right_lstick); break;
-	case id_pad_lstick_up: UpdateLabel(b_up_lstick); break;
-
-	case id_pad_left: UpdateLabel(b_left); break;
-	case id_pad_down: UpdateLabel(b_down); break;
-	case id_pad_right: UpdateLabel(b_right); break;
-	case id_pad_up: UpdateLabel(b_up); break;
-
-	case id_pad_l1: UpdateLabel(b_shift_l1); break;
-	case id_pad_l2: UpdateLabel(b_shift_l2); break;
-	case id_pad_l3: UpdateLabel(b_shift_l3); break;
-
-	case id_pad_start: UpdateLabel(b_start); break;
-	case id_pad_select: UpdateLabel(b_select); break;
-
-	case id_pad_r1: UpdateLabel(b_shift_r1); break;
-	case id_pad_r2: UpdateLabel(b_shift_r2); break;
-	case id_pad_r3: UpdateLabel(b_shift_r3); break;
-
-	case id_pad_square: UpdateLabel(b_square); break;
-	case id_pad_cross: UpdateLabel(b_cross); break;
-	case id_pad_circle: UpdateLabel(b_circle); break;
-	case id_pad_triangle: UpdateLabel(b_triangle); break;
-
-	case id_pad_rstick_left: UpdateLabel(b_left_rstick); break;
-	case id_pad_rstick_down: UpdateLabel(b_down_rstick); break;
-	case id_pad_rstick_right: UpdateLabel(b_right_rstick); break;
-	case id_pad_rstick_up: UpdateLabel(b_up_rstick); break;
-
-	default: LOG_ERROR(HLE, "Unknown button ID: %d", id); break;
+		LOG_NOTICE(HLE, "Pad Settings: Handler Type: %d, Unknown button ID: %d", static_cast<int>(m_handler_type), m_button_id);
 	}
-}
-
-void pad_settings_dialog::SwitchButtons(const bool IsEnabled)
-{
-	b_up_lstick->setEnabled(IsEnabled);
-	b_down_lstick->setEnabled(IsEnabled);
-	b_left_lstick->setEnabled(IsEnabled);
-	b_right_lstick->setEnabled(IsEnabled);
-
-	b_up->setEnabled(IsEnabled);
-	b_down->setEnabled(IsEnabled);
-	b_left->setEnabled(IsEnabled);
-	b_right->setEnabled(IsEnabled);
-
-	b_shift_l1->setEnabled(IsEnabled);
-	b_shift_l2->setEnabled(IsEnabled);
-	b_shift_l3->setEnabled(IsEnabled);
-
-	b_start->setEnabled(IsEnabled);
-	b_select->setEnabled(IsEnabled);
-
-	b_shift_r1->setEnabled(IsEnabled);
-	b_shift_r2->setEnabled(IsEnabled);
-	b_shift_r3->setEnabled(IsEnabled);
-
-	b_square->setEnabled(IsEnabled);
-	b_cross->setEnabled(IsEnabled);
-	b_circle->setEnabled(IsEnabled);
-	b_triangle->setEnabled(IsEnabled);
-
-	b_up_rstick->setEnabled(IsEnabled);
-	b_down_rstick->setEnabled(IsEnabled);
-	b_left_rstick->setEnabled(IsEnabled);
-	b_right_rstick->setEnabled(IsEnabled);
-
-	b_ok->setEnabled(IsEnabled);
-	b_cancel->setEnabled(IsEnabled);
-	b_reset->setEnabled(IsEnabled);
-}
-
-void pad_settings_dialog::RunTimer(const u32 seconds, const u32 id)
-{
-	m_seconds = seconds;
-	clock_t t1, t2;
-	t1 = t2 = clock() / CLOCKS_PER_SEC;
-	while (m_seconds)
+	else
 	{
-		if (t1 / CLOCKS_PER_SEC + 1 <= (t2 = clock()) / CLOCKS_PER_SEC)
+		m_cfg_entries[m_button_id].key = ((keyboard_pad_handler*)m_handler.get())->GetKeyName(keyEvent);
+		m_cfg_entries[m_button_id].text = qstr(m_cfg_entries[m_button_id].key);
+	}
+
+	ReactivateButtons();
+}
+
+void pad_settings_dialog::mousePressEvent(QMouseEvent* event)
+{
+	if (m_handler_type != pad_handler::keyboard)
+	{
+		return;
+	}
+
+	if (m_button_id == button_ids::id_pad_begin)
+	{
+		return;
+	}
+
+	if (m_button_id <= button_ids::id_pad_begin || m_button_id >= button_ids::id_pad_end)
+	{
+		LOG_NOTICE(HLE, "Pad Settings: Handler Type: %d, Unknown button ID: %d", static_cast<int>(m_handler_type), m_button_id);
+	}
+	else
+	{
+		m_cfg_entries[m_button_id].key = ((keyboard_pad_handler*)m_handler.get())->GetMouseName(event);
+		m_cfg_entries[m_button_id].text = qstr(m_cfg_entries[m_button_id].key);
+	}
+
+	ReactivateButtons();
+}
+
+bool pad_settings_dialog::eventFilter(QObject* object, QEvent* event)
+{
+	// Disabled buttons should not absorb mouseclicks
+	if (event->type() == QEvent::MouseButtonPress)
+		event->ignore();
+	return QDialog::eventFilter(object, event);
+}
+
+void pad_settings_dialog::UpdateLabel(bool is_reset)
+{
+	if (is_reset)
+	{
+		if (m_handler->has_rumble())
 		{
-			UpdateTimerLabel(id);
-			m_seconds--;
-			t1 = t2;
+			ui->chb_vibration_large->setChecked((bool)m_handler_cfg.enable_vibration_motor_large);
+			ui->chb_vibration_small->setChecked((bool)m_handler_cfg.enable_vibration_motor_small);
+			ui->chb_vibration_switch->setChecked((bool)m_handler_cfg.switch_vibration_motors);
 		}
 
-		if (m_key_pressed)
+		if (m_handler->has_deadzones())
 		{
-			m_seconds = 0;
-			break;
+			ui->slider_trigger_left->setValue(m_handler_cfg.ltriggerthreshold);
+			ui->slider_trigger_right->setValue(m_handler_cfg.rtriggerthreshold);
+			ui->slider_stick_left->setValue(m_handler_cfg.lstickdeadzone);
+			ui->slider_stick_right->setValue(m_handler_cfg.rstickdeadzone);
 		}
+	}
+
+	for (auto& entry : m_cfg_entries)
+	{
+		if (is_reset)
+		{
+			entry.second.key = *entry.second.cfg_name;
+			entry.second.text = qstr(entry.second.key);
+		}
+
+		m_padButtons->button(entry.first)->setText(entry.second.text);
 	}
 }
 
-void pad_settings_dialog::Init(const u32 max_connect)
+void pad_settings_dialog::SwitchButtons(bool is_enabled)
 {
-	memset(&m_info, 0, sizeof(PadInfo));
-	m_info.max_connect = max_connect;
-	LoadSettings();
-	m_info.now_connect = std::min(m_pads.size(), (size_t)max_connect);
+	for (int i = button_ids::id_pad_begin + 1; i < button_ids::id_pad_end; i++)
+	{
+		m_padButtons->button(i)->setEnabled(is_enabled);
+	}
 }
 
-void pad_settings_dialog::LoadSettings()
+void pad_settings_dialog::SaveConfig()
 {
-	g_kbpad_config.load();
+	for (const auto& entry : m_cfg_entries)
+	{
+		entry.second.cfg_name->from_string(entry.second.key);
+	}
 
-	//Fixed assign change, default is both sensor and press off
-	m_pads.emplace_back(
-		CELL_PAD_STATUS_CONNECTED | CELL_PAD_STATUS_ASSIGN_CHANGES,
-		CELL_PAD_SETTING_PRESS_OFF | CELL_PAD_SETTING_SENSOR_OFF,
-		CELL_PAD_CAPABILITY_PS3_CONFORMITY | CELL_PAD_CAPABILITY_PRESS_MODE,
-		CELL_PAD_DEV_TYPE_STANDARD);
+	if (m_handler->has_rumble())
+	{
+		m_handler_cfg.enable_vibration_motor_large.set(ui->chb_vibration_large->isChecked());
+		m_handler_cfg.enable_vibration_motor_small.set(ui->chb_vibration_small->isChecked());
+		m_handler_cfg.switch_vibration_motors.set(ui->chb_vibration_switch->isChecked());
+	}
 
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.left, CELL_PAD_CTRL_LEFT);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.down, CELL_PAD_CTRL_DOWN);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.right, CELL_PAD_CTRL_RIGHT);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.up, CELL_PAD_CTRL_UP);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.start, CELL_PAD_CTRL_START);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.r3, CELL_PAD_CTRL_R3);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.l3, CELL_PAD_CTRL_L3);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL1, g_kbpad_config.select, CELL_PAD_CTRL_SELECT);
+	if (m_handler->has_deadzones())
+	{
+		m_handler_cfg.ltriggerthreshold.set(ui->slider_trigger_left->value());
+		m_handler_cfg.rtriggerthreshold.set(ui->slider_trigger_right->value());
+		m_handler_cfg.lstickdeadzone.set(ui->slider_stick_left->value());
+		m_handler_cfg.rstickdeadzone.set(ui->slider_stick_right->value());
+	}
 
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.square, CELL_PAD_CTRL_SQUARE);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.cross, CELL_PAD_CTRL_CROSS);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.circle, CELL_PAD_CTRL_CIRCLE);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.triangle, CELL_PAD_CTRL_TRIANGLE);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.r1, CELL_PAD_CTRL_R1);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.l1, CELL_PAD_CTRL_L1);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.r2, CELL_PAD_CTRL_R2);
-	m_pads[0].m_buttons.emplace_back(CELL_PAD_BTN_OFFSET_DIGITAL2, g_kbpad_config.l2, CELL_PAD_CTRL_L2);
-
-	m_pads[0].m_sticks.emplace_back(CELL_PAD_BTN_OFFSET_ANALOG_LEFT_X, g_kbpad_config.left_stick_left, g_kbpad_config.left_stick_right);
-	m_pads[0].m_sticks.emplace_back(CELL_PAD_BTN_OFFSET_ANALOG_LEFT_Y, g_kbpad_config.left_stick_up, g_kbpad_config.left_stick_down);
-	m_pads[0].m_sticks.emplace_back(CELL_PAD_BTN_OFFSET_ANALOG_RIGHT_X, g_kbpad_config.right_stick_left, g_kbpad_config.right_stick_right);
-	m_pads[0].m_sticks.emplace_back(CELL_PAD_BTN_OFFSET_ANALOG_RIGHT_Y, g_kbpad_config.right_stick_up, g_kbpad_config.right_stick_down);
-}
-
-const QString pad_settings_dialog::GetKeyName(const u32 keyCode)
-{
-	//TODO what about numpad?
-	return QKeySequence(keyCode).toString();
+	m_handler_cfg.save();
 }
 
 void pad_settings_dialog::OnPadButtonClicked(int id)
 {
-	if (id != id_reset_parameters && id != id_ok)
+	switch (id)
 	{
-		m_button_id = id;
-		SwitchButtons(false); // disable all buttons, needed for using Space, Enter and other specific buttons
-		//RunTimer(3, event.GetId()); // TODO: Currently, timer disabled. Use by later, have some strange problems
-		//SwitchButtons(true); // needed, if timer enabled
-		UpdateLabel();
+	case button_ids::id_pad_begin:
+	case button_ids::id_pad_end:
+	case button_ids::id_cancel:
+		return;
+	case button_ids::id_reset_parameters:
+		ReactivateButtons();
+		m_handler_cfg.from_default();
+		UpdateLabel(true);
+		return;
+	case button_ids::id_blacklist:
+		m_handler->GetNextButtonPress(m_device_name, nullptr, true);
+		return;
+	case button_ids::id_ok:
+		SaveConfig();
+		QDialog::accept();
+		return;
+	default:
+		break;
 	}
 
-	else
+	for (auto but : m_padButtons->buttons())
 	{
-		switch (id)
-		{
-		case id_reset_parameters: g_kbpad_config.from_default(); UpdateLabel(); break;
-		case id_ok: g_kbpad_config.save(); QDialog::accept(); break;
-		case id_cancel: break;
-		}
+		but->setFocusPolicy(Qt::ClickFocus);
 	}
+
+	m_button_id = id;
+	m_padButtons->button(m_button_id)->setText(tr("[ Waiting %1 ]").arg(MAX_SECONDS));
+	m_padButtons->button(m_button_id)->setPalette(QPalette(Qt::blue));
+	SwitchButtons(false); // disable all buttons, needed for using Space, Enter and other specific buttons
+	m_timer.start(1000);
 }

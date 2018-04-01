@@ -37,13 +37,13 @@ struct lv2_mutex final : lv2_obj
 	atomic_t<u32> cond_count{0}; // Condition Variables
 	std::deque<cpu_thread*> sq;
 
-	lv2_mutex(u32 protocol, u32 recursive, u64 name)
+	lv2_mutex(u32 protocol, u32 recursive, u32 shared, u32 adaptive, u64 key, s32 flags, u64 name)
 		: protocol(protocol)
 		, recursive(recursive)
-		, shared(0)
-		, adaptive(0)
-		, key(0)
-		, flags(0)
+		, shared(shared)
+		, adaptive(adaptive)
+		, key(key)
+		, flags(flags)
 		, name(name)
 	{
 	}
@@ -147,7 +147,7 @@ class ppu_thread;
 
 // Syscalls
 
-error_code sys_mutex_create(vm::ps3::ptr<u32> mutex_id, vm::ps3::ptr<sys_mutex_attribute_t> attr);
+error_code sys_mutex_create(vm::ptr<u32> mutex_id, vm::ptr<sys_mutex_attribute_t> attr);
 error_code sys_mutex_destroy(u32 mutex_id);
 error_code sys_mutex_lock(ppu_thread& ppu, u32 mutex_id, u64 timeout);
 error_code sys_mutex_trylock(ppu_thread& ppu, u32 mutex_id);

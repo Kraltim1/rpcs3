@@ -18,40 +18,58 @@
 
 #include <memory>
 
+namespace Ui
+{
+	class main_window;
+}
+
 class main_window : public QMainWindow
 {
 	Q_OBJECT
 
+	Ui::main_window *ui;
+
 	bool m_sys_menu_opened;
+	bool m_is_list_mode = true;
+	bool m_save_slider_pos = false;
+	int m_other_slider_pos = 0;
 
-	Render_Creator m_Render_Creator;
-
-	QWidget* controls;
-
-	QIcon appIcon;
-	QIcon icon_play;
-	QIcon icon_pause;
-	QIcon icon_stop;
-	QIcon icon_restart;
-
-	QPushButton* menu_run;
-	QPushButton* menu_stop;
-	QPushButton* menu_restart;
-	QPushButton* menu_capture_frame;
+	QIcon m_appIcon;
+	QIcon m_icon_play;
+	QIcon m_icon_pause;
+	QIcon m_icon_stop;
+	QIcon m_icon_restart;
+	QIcon m_icon_fullscreen_on;
+	QIcon m_icon_fullscreen_off;
 
 #ifdef _WIN32
-	QWinThumbnailToolBar *thumb_bar;
-	QWinThumbnailToolButton *thumb_playPause;
-	QWinThumbnailToolButton *thumb_stop;
-	QWinThumbnailToolButton *thumb_restart;
+	QIcon m_icon_thumb_play;
+	QIcon m_icon_thumb_pause;
+	QIcon m_icon_thumb_stop;
+	QIcon m_icon_thumb_restart;
+	QWinThumbnailToolBar *m_thumb_bar = nullptr;
+	QWinThumbnailToolButton *m_thumb_playPause = nullptr;
+	QWinThumbnailToolButton *m_thumb_stop = nullptr;
+	QWinThumbnailToolButton *m_thumb_restart = nullptr;
 	QStringList m_vulkan_adapters;
 #endif
 #ifdef _MSC_VER
 	QStringList m_d3d12_adapters;
 #endif
 
+	enum drop_type
+	{
+		drop_error,
+		drop_pkg,
+		drop_pup,
+		drop_rap,
+		drop_dir,
+		drop_game
+	};
+
 public:
-	explicit main_window(QWidget *parent = 0);
+	explicit main_window(std::shared_ptr<gui_settings> guiSettings, std::shared_ptr<emu_settings> emuSettings, QWidget *parent = 0);
+	void Init();
 	~main_window();
 	void CreateThumbnailToolbar();
 	QIcon GetAppIcon();
@@ -66,87 +84,57 @@ public Q_SLOTS:
 	void OnEmuPause();
 	void OnEmuReady();
 
+	void RepaintGui();
+
 private Q_SLOTS:
+	void Boot(const std::string& path, bool direct = false, bool add_only = false);
 	void BootElf();
 	void BootGame();
-	void InstallPkg();
-	void InstallPup();
 	void DecryptSPRXLibraries();
-	void About();
 
 	void SaveWindowState();
+	void ConfigureGuiFromSettings(bool configure_all = false);
+	void SetIconSizeActions(int idx);
 
 protected:
 	void closeEvent(QCloseEvent *event) override;
-	void SetAppIconFromPath(const std::string path);
+	void keyPressEvent(QKeyEvent *keyEvent) override;
+	void mouseDoubleClickEvent(QMouseEvent *event) override;
+	void dropEvent(QDropEvent* event) override;
+	void dragEnterEvent(QDragEnterEvent* event) override;
+	void dragMoveEvent(QDragMoveEvent* event) override;
+	void dragLeaveEvent(QDragLeaveEvent* event) override;
+	void SetAppIconFromPath(const std::string& path);
 private:
+	void RepaintToolbar();
+	void RepaintToolBarIcons();
+	void RepaintThumbnailIcons();
 	void CreateActions();
 	void CreateConnects();
-	void CreateMenus();
 	void CreateDockWindows();
-	void ConfigureGuiFromSettings(bool configureAll = false);
 	void EnableMenus(bool enabled);
-	void keyPressEvent(QKeyEvent *keyEvent);
+	void InstallPkg(const QString& dropPath = "");
+	void InstallPup(const QString& dropPath = "");
+
+	int IsValidFile(const QMimeData& md, QStringList* dropPaths = nullptr);
+	void AddGamesFromDir(const QString& path);
 
 	QAction* CreateRecentAction(const q_string_pair& entry, const uint& sc_idx);
 	void BootRecentAction(const QAction* act);
 	void AddRecentAction(const q_string_pair& entry);
 
 	q_pair_list m_rg_entries;
-	QMenu* m_bootRecentMenu;
 	QList<QAction*> m_recentGameActs;
 
-	QActionGroup* iconSizeActGroup;
-	QActionGroup* listModeActGroup;
-	QActionGroup* categoryVisibleActGroup;
-
-	QAction *bootElfAct;
-	QAction *bootGameAct;
-	QAction *clearRecentAct;
-	QAction *freezeRecentAct;
-	QAction *bootInstallPkgAct;
-	QAction *bootInstallPupAct;
-	QAction *sysPauseAct;
-	QAction *sysStopAct;
-	QAction *sysSendOpenMenuAct;
-	QAction *sysSendExitAct;
-	QAction *confSettingsAct;
-	QAction *confPadAct;
-	QAction *confAutopauseManagerAct;
-	QAction *confVFSDialogAct;
-	QAction *confSavedataManagerAct;
-	QAction *toolsCgDisasmAct;
-	QAction *toolskernel_explorerAct;
-	QAction *toolsmemory_viewerAct;
-	QAction *toolsRsxDebuggerAct;
-	QAction *toolsStringSearchAct;
-	QAction *toolsDecryptSprxLibsAct;
-	QAction *exitAct;
-	QAction *showDebuggerAct;
-	QAction *showLogAct;
-	QAction *showGameListAct;
-	QAction *showControlsAct;
-	QAction *refreshGameListAct;
-	QAction *showGameListToolBarAct;
-	QAction* showCatHDDGameAct;
-	QAction* showCatDiscGameAct;
-	QAction* showCatHomeAct;
-	QAction* showCatAudioVideoAct;
-	QAction* showCatGameDataAct;
-	QAction* showCatUnknownAct;
-	QAction* showCatOtherAct;
-	QAction* setIconSizeTinyAct;
-	QAction* setIconSizeSmallAct;
-	QAction* setIconSizeMediumAct;
-	QAction* setIconSizeLargeAct;
-	QAction* setlistModeListAct;
-	QAction* setlistModeGridAct;
-	QAction *aboutAct;
-	QAction *aboutQtAct;
+	QActionGroup* m_iconSizeActGroup;
+	QActionGroup* m_listModeActGroup;
+	QActionGroup* m_categoryVisibleActGroup;
 
 	// Dockable widget frames
-	log_frame *logFrame;
-	debugger_frame *debuggerFrame;
-	game_list_frame *gameListFrame;
+	QMainWindow *m_mw;
+	log_frame *m_logFrame;
+	debugger_frame *m_debuggerFrame;
+	game_list_frame *m_gameListFrame;
 	std::shared_ptr<gui_settings> guiSettings;
+	std::shared_ptr<emu_settings> emuSettings;
 };

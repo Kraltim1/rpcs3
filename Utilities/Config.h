@@ -12,6 +12,9 @@
 
 namespace cfg
 {
+	// Format min and max values
+	std::vector<std::string> make_int_range(s64 min, s64 max);
+
 	// Convert string to signed integer
 	bool try_to_int64(s64* out, const std::string& value, s64 min, s64 max);
 
@@ -115,7 +118,7 @@ namespace cfg
 		bool m_value;
 
 	public:
-		const bool def;
+		bool def;
 
 		_bool(node* owner, const std::string& name, bool def = false)
 			: _base(type::_bool, owner, name)
@@ -146,6 +149,11 @@ namespace cfg
 				return false;
 
 			return true;
+		}
+
+		void set(const bool& value)
+		{
+			m_value = value;
 		}
 	};
 
@@ -214,7 +222,7 @@ namespace cfg
 		int_type m_value;
 
 	public:
-		const int_type def;
+		int_type def;
 
 		_int(node* owner, const std::string& name, int_type def = std::min<int_type>(Max, std::max<int_type>(Min, 0)))
 			: _base(type::_int, owner, name)
@@ -249,6 +257,16 @@ namespace cfg
 
 			return false;
 		}
+
+		void set(const s64& value)
+		{
+			m_value = static_cast<int_type>(value);
+		}
+
+		std::vector<std::string> to_list() const override
+		{
+			return make_int_range(Min, Max);
+		}
 	};
 
 	// Alias for 32 bit int
@@ -263,7 +281,7 @@ namespace cfg
 		std::string m_value;
 
 	public:
-		const std::string def;
+		std::string def;
 
 		string(node* owner, const std::string& name, const std::string& def = {})
 			: _base(type::string, owner, name)

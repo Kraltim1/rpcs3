@@ -25,6 +25,7 @@ struct render_target_traits
 	ComPtr<ID3D12Resource> create_new_surface(
 		u32 address,
 		surface_color_format color_format, size_t width, size_t height,
+		ID3D12Resource* /*old*/,
 		gsl::not_null<ID3D12Device*> device, const std::array<float, 4> &clear_color, float, u8)
 	{
 		DXGI_FORMAT dxgi_format = get_color_surface_format(color_format);
@@ -54,6 +55,18 @@ struct render_target_traits
 	}
 
 	static
+	void get_surface_info(ID3D12Resource *surface, rsx::surface_format_info *info)
+	{
+		//TODO
+		auto desc = surface->GetDesc();
+		info->rsx_pitch = static_cast<u16>(desc.Width);
+		info->native_pitch = static_cast<u16>(desc.Width);
+		info->surface_width = static_cast<u32>(desc.Width);
+		info->surface_height = static_cast<u32>(desc.Height);
+		info->bpp = 1;
+	}
+
+	static
 	void prepare_rtt_for_drawing(
 		gsl::not_null<ID3D12GraphicsCommandList*> command_list,
 		ID3D12Resource* rtt)
@@ -73,6 +86,7 @@ struct render_target_traits
 	ComPtr<ID3D12Resource> create_new_surface(
 		u32 address,
 		surface_depth_format surfaceDepthFormat, size_t width, size_t height,
+		ID3D12Resource* /*old*/,
 		gsl::not_null<ID3D12Device*> device, const std::array<float, 4>& , float clear_depth, u8 clear_stencil)
 	{
 		D3D12_CLEAR_VALUE clear_depth_value = {};
@@ -114,28 +128,33 @@ struct render_target_traits
 		command_list->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(ds, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 	}
 
+	static
 	void invalidate_rtt_surface_contents(
 		gsl::not_null<ID3D12GraphicsCommandList*>,
-		ID3D12Resource*)
+		ID3D12Resource*, ID3D12Resource*, bool)
 	{}
 
+	static
 	void invalidate_depth_surface_contents(
 		gsl::not_null<ID3D12GraphicsCommandList*>,
-		ID3D12Resource*)
+		ID3D12Resource*, ID3D12Resource*, bool)
 	{
 		//TODO
 	}
 
+	static
+	void notify_surface_invalidated(const ComPtr<ID3D12Resource>&)
+	{}
 
 	static
-	bool rtt_has_format_width_height(const ComPtr<ID3D12Resource> &rtt, surface_color_format surface_color_format, size_t width, size_t height)
+	bool rtt_has_format_width_height(const ComPtr<ID3D12Resource> &rtt, surface_color_format surface_color_format, size_t width, size_t height, bool=false)
 	{
 		DXGI_FORMAT dxgi_format = get_color_surface_format(surface_color_format);
 		return rtt->GetDesc().Format == dxgi_format && rtt->GetDesc().Width == width && rtt->GetDesc().Height == height;
 	}
 
 	static
-	bool ds_has_format_width_height(const ComPtr<ID3D12Resource> &rtt, surface_depth_format, size_t width, size_t height)
+	bool ds_has_format_width_height(const ComPtr<ID3D12Resource> &rtt, surface_depth_format, size_t width, size_t height, bool=false)
 	{
 		//TODO: Check format
 		return rtt->GetDesc().Width == width && rtt->GetDesc().Height == height;

@@ -59,7 +59,10 @@ bool VirtualMemoryBlock::Map(u32 realaddr, u32 size, u32 addr)
 	{
 		if (addr >= m_mapped_memory[i].addr && addr + size - 1 <= m_mapped_memory[i].addr + m_mapped_memory[i].size - 1)
 		{
-			return false;
+			// it seems mapping another range inside a previous one is legit on ps3
+			// as long as it's coherent aliasing : offset from EA must match IO offset
+			// example game using this pattern : BCES01584 - the last of us
+			return (addr - m_mapped_memory[i].addr) == (realaddr - m_mapped_memory[i].realAddress);
 		}
 	}
 
@@ -102,7 +105,7 @@ bool VirtualMemoryBlock::Read32(const u32 addr, u32* value)
 	u32 realAddr;
 	if (!getRealAddr(addr, realAddr))
 		return false;
-	*value = vm::ps3::read32(realAddr);
+	*value = vm::read32(realAddr);
 	return true;
 }
 
@@ -111,7 +114,7 @@ bool VirtualMemoryBlock::Write32(const u32 addr, const u32 value)
 	u32 realAddr;
 	if (!getRealAddr(addr, realAddr))
 		return false;
-	vm::ps3::write32(realAddr, value);
+	vm::write32(realAddr, value);
 	return true;
 }
 

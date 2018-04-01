@@ -2,12 +2,13 @@
 #include "Emu/System.h"
 #include "Emu/Cell/PPUModule.h"
 
-#include "Emu/Cell/lv2/sys_process.h"
+#include "sysPrxForUser.h"
 #include "Emu/IdManager.h"
 #include "Crypto/unedat.h"
 #include "Crypto/unself.h"
 #include "cellRtc.h"
 #include "sceNp.h"
+#include "cellSysutil.h"
 
 logs::channel sceNp("sceNp");
 
@@ -43,26 +44,20 @@ s32 sceNpTerm()
 
 s32 npDrmIsAvailable(vm::cptr<u8> k_licensee_addr, vm::cptr<char> drm_path)
 {
-	const std::string& enc_drm_path = drm_path.get_ptr();
+	std::array<u8, 0x10> k_licensee{};
+
+	if (k_licensee_addr)
+	{
+		std::copy_n(k_licensee_addr.get_ptr(), k_licensee.size(), k_licensee.begin());
+		sceNp.notice("npDrmIsAvailable(): KLicense key %s", *reinterpret_cast<be_t<v128, 1>*>(k_licensee.data()));
+	}
+
+	const std::string enc_drm_path = drm_path.get_ptr();
 
 	if (!fs::is_file(vfs::get(enc_drm_path)))
 	{
 		sceNp.warning("npDrmIsAvailable(): '%s' not found", enc_drm_path);
 		return CELL_ENOENT;
-	}
-
-	std::string k_licensee_str = "";
-	std::array<u8, 0x10> k_licensee{0};
-
-	if (k_licensee_addr)
-	{
-		for (s8 i = 0; i < 0x10; i++)
-		{
-			k_licensee[i] = *(k_licensee_addr + i);
-			k_licensee_str += fmt::format("%02x", k_licensee[i]);
-		}
-
-		sceNp.notice("npDrmIsAvailable(): KLicense key %s", k_licensee_str);
 	}
 
 	auto npdrmkeys = fxm::get_always<LoadedNpdrmKeys_t>();
@@ -145,6 +140,11 @@ s32 sceNpDrmVerifyUpgradeLicense(vm::cptr<char> content_id)
 {
 	sceNp.warning("sceNpDrmVerifyUpgradeLicense(content_id=%s)", content_id);
 
+	if (!content_id)
+	{
+		return SCE_NP_DRM_ERROR_INVALID_PARAM;
+	}
+
 	if (!fs::is_file(vfs::get("/dev_hdd0/home/00000001/exdata/") + content_id.get_ptr() + ".rap"))
 	{
 		// Game hasn't been purchased therefore no RAP file present
@@ -158,6 +158,11 @@ s32 sceNpDrmVerifyUpgradeLicense(vm::cptr<char> content_id)
 s32 sceNpDrmVerifyUpgradeLicense2(vm::cptr<char> content_id)
 {
 	sceNp.warning("sceNpDrmVerifyUpgradeLicense2(content_id=%s)", content_id);
+
+	if (!content_id)
+	{
+		return SCE_NP_DRM_ERROR_INVALID_PARAM;
+	}
 
 	if (!fs::is_file(vfs::get("/dev_hdd0/home/00000001/exdata/") + content_id.get_ptr() + ".rap"))
 	{
@@ -184,27 +189,29 @@ s32 sceNpDrmGetTimelimit(vm::cptr<char> path, vm::ptr<u64> time_remain)
 	return CELL_OK;
 }
 
-s32 sceNpDrmProcessExitSpawn(vm::cptr<u8> klicensee, vm::cptr<char> path, u32 argv_addr, u32 envp_addr, u32 data_addr, u32 data_size, u32 prio, u64 flags)
+s32 sceNpDrmProcessExitSpawn(ppu_thread& ppu, vm::cptr<u8> klicensee, vm::cptr<char> path, vm::cpptr<char> argv, vm::cpptr<char> envp, u32 data, u32 data_size, s32 prio, u64 flags)
 {
-	sceNp.warning("sceNpDrmProcessExitSpawn() -> sys_game_process_exitspawn");
+	sceNp.warning("sceNpDrmProcessExitSpawn(klicensee=*0x%x, path=%s, argv=**0x%x, envp=**0x%x, data=*0x%x, data_size=0x%x, prio=%d, flags=0x%x)", klicensee, path, argv, envp, data, data_size, prio, flags);
 
-	sceNp.warning("klicensee: 0x%x", klicensee);
-	npDrmIsAvailable(klicensee, path);
+	if (s32 error = npDrmIsAvailable(klicensee, path))
+	{
+		return error;
+	}
 
-	sys_game_process_exitspawn(path, argv_addr, envp_addr, data_addr, data_size, prio, flags);
-
+	sys_game_process_exitspawn(ppu, path, argv, envp, data, data_size, prio, flags);
 	return CELL_OK;
 }
 
-s32 sceNpDrmProcessExitSpawn2(vm::cptr<u8> klicensee, vm::cptr<char> path, u32 argv_addr, u32 envp_addr, u32 data_addr, u32 data_size, u32 prio, u64 flags)
+s32 sceNpDrmProcessExitSpawn2(ppu_thread& ppu, vm::cptr<u8> klicensee, vm::cptr<char> path, vm::cpptr<char> argv, vm::cpptr<char> envp, u32 data, u32 data_size, s32 prio, u64 flags)
 {
-	sceNp.warning("sceNpDrmProcessExitSpawn2() -> sys_game_process_exitspawn2");
+	sceNp.warning("sceNpDrmProcessExitSpawn2(klicensee=*0x%x, path=%s, argv=**0x%x, envp=**0x%x, data=*0x%x, data_size=0x%x, prio=%d, flags=0x%x)", klicensee, path, argv, envp, data, data_size, prio, flags);
 	
-	sceNp.warning("klicensee: 0x%x", klicensee);
-	npDrmIsAvailable(klicensee, path);
+	if (s32 error = npDrmIsAvailable(klicensee, path))
+	{
+		return error;
+	}
 
-	sys_game_process_exitspawn2(path, argv_addr, envp_addr, data_addr, data_size, prio, flags);
-
+	sys_game_process_exitspawn2(ppu, path, argv, envp, data, data_size, prio, flags);
 	return CELL_OK;
 }
 
@@ -511,9 +518,9 @@ s32 sceNpBasicGetEvent(vm::ptr<s32> event, vm::ptr<SceNpUserInfo> from, vm::ptr<
 	sceNp.warning("sceNpBasicGetEvent(event=*0x%x, from=*0x%x, data=*0x%x, size=*0x%x)", event, from, data, size);
 
 	// TODO: Check for other error and pass other events
-	*event = SCE_NP_BASIC_EVENT_OFFLINE;
+	//*event = SCE_NP_BASIC_EVENT_OFFLINE; // This event only indicates a contact is offline, not the current status of the connection
 
-	return CELL_OK;
+	return SCE_NP_BASIC_ERROR_NO_EVENT;
 }
 
 s32 sceNpCommerceCreateCtx()
@@ -905,7 +912,7 @@ s32 sceNpLookupTitleSmallStorageAsync()
 
 s32 sceNpManagerRegisterCallback(vm::ptr<SceNpManagerCallback> callback, vm::ptr<void> arg)
 {
-	sceNp.todo("sceNpManagerRegisterCallback(callback=*0x%x, arg=*0x%x)", callback, arg);
+	sceNp.warning("sceNpManagerRegisterCallback(callback=*0x%x, arg=*0x%x)", callback, arg);
 
 	if (!callback)
 	{
@@ -972,7 +979,7 @@ s32 sceNpManagerGetOnlineId(vm::ptr<SceNpOnlineId> onlineId)
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -994,7 +1001,7 @@ s32 sceNpManagerGetNpId(ppu_thread& ppu, vm::ptr<SceNpId> npId)
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -1082,7 +1089,7 @@ s32 sceNpManagerGetAccountRegion(vm::ptr<SceNpCountryCode> countryCode, vm::ptr<
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -1104,7 +1111,7 @@ s32 sceNpManagerGetAccountAge(vm::ptr<s32> age)
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -1126,7 +1133,7 @@ s32 sceNpManagerGetContentRatingFlag(vm::ptr<s32> isRestricted, vm::ptr<s32> age
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -1152,7 +1159,7 @@ s32 sceNpManagerGetChatRestrictionFlag(vm::ptr<s32> isRestricted)
 		return SCE_NP_ERROR_OFFLINE;
 	}
 
-	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN || g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
+	if (g_psn_connection_status != SCE_NP_MANAGER_STATUS_LOGGING_IN && g_psn_connection_status != SCE_NP_MANAGER_STATUS_ONLINE)
 	{
 		return SCE_NP_ERROR_INVALID_STATE;
 	}
@@ -1399,9 +1406,9 @@ s32 sceNpScoreDestroyTitleCtx()
 	return CELL_OK;
 }
 
-s32 sceNpScoreCreateTransactionCtx()
+s32 sceNpScoreCreateTransactionCtx(s32 titleCtxId)
 {
-	UNIMPLEMENTED_FUNC(sceNp);
+	sceNp.todo("sceNpScoreCreateTransactionCtx(titleCtxId=%d)", titleCtxId);
 	return CELL_OK;
 }
 
@@ -1423,15 +1430,27 @@ s32 sceNpScoreSetPlayerCharacterId()
 	return CELL_OK;
 }
 
-s32 sceNpScoreWaitAsync()
+s32 sceNpScoreWaitAsync(s32 transId, vm::ptr<s32> result)
 {
-	UNIMPLEMENTED_FUNC(sceNp);
+	sceNp.todo("sceNpScoreWaitAsync(transId=%d, result=*0x%x)", transId, result);
+
+	if (transId <= 0)
+	{
+		return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+	}
+
 	return CELL_OK;
 }
 
-s32 sceNpScorePollAsync()
+s32 sceNpScorePollAsync(s32 transId, vm::ptr<s32> result)
 {
-	UNIMPLEMENTED_FUNC(sceNp);
+	sceNp.todo("sceNpScorePollAsync(transId=%d, result=*0x%x)", transId, result);
+
+	if (transId <= 0)
+	{
+		return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+	}
+
 	return CELL_OK;
 }
 
@@ -1502,6 +1521,18 @@ s32 sceNpScoreGetRankingByRange()
 }
 
 s32 sceNpScoreGetRankingByRangeAsync()
+{
+	UNIMPLEMENTED_FUNC(sceNp);
+	return CELL_OK;
+}
+
+s32 sceNpScoreGetFriendsRanking()
+{
+	UNIMPLEMENTED_FUNC(sceNp);
+	return CELL_OK;
+}
+
+s32 sceNpScoreGetFriendsRankingAsync()
 {
 	UNIMPLEMENTED_FUNC(sceNp);
 	return CELL_OK;
@@ -1712,6 +1743,18 @@ s32 sceNpSignalingCancelPeerNetInfo()
 }
 
 s32 sceNpSignalingGetPeerNetInfoResult()
+{
+	UNIMPLEMENTED_FUNC(sceNp);
+	return CELL_OK;
+}
+
+s32 sceNpUtilCanonicalizeNpIdForPs3()
+{
+	UNIMPLEMENTED_FUNC(sceNp);
+	return CELL_OK;
+}
+
+s32 sceNpUtilCanonicalizeNpIdForPsp()
 {
 	UNIMPLEMENTED_FUNC(sceNp);
 	return CELL_OK;
@@ -1997,6 +2040,8 @@ DECLARE(ppu_module_manager::sceNp)("sceNp", []()
 	REG_FUNC(sceNp, sceNpScoreGetRankingByNpIdAsync);
 	REG_FUNC(sceNp, sceNpScoreGetRankingByRange);
 	REG_FUNC(sceNp, sceNpScoreGetRankingByRangeAsync);
+	REG_FUNC(sceNp, sceNpScoreGetFriendsRanking);
+	REG_FUNC(sceNp, sceNpScoreGetFriendsRankingAsync);
 	REG_FUNC(sceNp, sceNpScoreCensorComment);
 	REG_FUNC(sceNp, sceNpScoreCensorCommentAsync);
 	REG_FUNC(sceNp, sceNpScoreSanitizeComment);
@@ -2032,11 +2077,13 @@ DECLARE(ppu_module_manager::sceNp)("sceNp", []()
 	REG_FUNC(sceNp, sceNpSignalingGetPeerNetInfo);
 	REG_FUNC(sceNp, sceNpSignalingCancelPeerNetInfo);
 	REG_FUNC(sceNp, sceNpSignalingGetPeerNetInfoResult);
+	REG_FUNC(sceNp, sceNpUtilCanonicalizeNpIdForPs3);
+	REG_FUNC(sceNp, sceNpUtilCanonicalizeNpIdForPsp);
 	REG_FUNC(sceNp, sceNpUtilCmpNpId);
 	REG_FUNC(sceNp, sceNpUtilCmpNpIdInOrder);
-	REG_FUNC(sceNp, sceNpUtilCmpOnlineId); // 0x8C760B52
-	REG_FUNC(sceNp, sceNpUtilGetPlatformType); // 0xC611029A
-	REG_FUNC(sceNp, sceNpUtilSetPlatformType); // 0xAFC62605
+	REG_FUNC(sceNp, sceNpUtilCmpOnlineId);
+	REG_FUNC(sceNp, sceNpUtilGetPlatformType);
+	REG_FUNC(sceNp, sceNpUtilSetPlatformType);
 	REG_FUNC(sceNp, _sceNpSysutilClientMalloc);
 	REG_FUNC(sceNp, _sceNpSysutilClientFree);
 	REG_FUNC(sceNp, _Z33_sce_np_sysutil_send_empty_packetiPN16sysutil_cxmlutil11FixedMemoryEPKcS3_);

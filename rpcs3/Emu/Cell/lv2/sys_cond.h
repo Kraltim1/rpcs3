@@ -30,14 +30,19 @@ struct lv2_cond final : lv2_obj
 	atomic_t<u32> waiters{0};
 	std::deque<cpu_thread*> sq;
 
-	lv2_cond(u64 name, std::shared_ptr<lv2_mutex> mutex)
-		: shared(0)
-		, key(0)
-		, flags(0)
+	lv2_cond(u32 shared, s32 flags, u64 key, u64 name, std::shared_ptr<lv2_mutex> mutex)
+		: shared(shared)
+		, key(key)
+		, flags(flags)
 		, name(name)
 		, mutex(std::move(mutex))
 	{
 		this->mutex->cond_count++;
+	}
+
+	~lv2_cond()
+	{
+		this->mutex->cond_count--;
 	}
 };
 
@@ -45,7 +50,7 @@ class ppu_thread;
 
 // Syscalls
 
-error_code sys_cond_create(vm::ps3::ptr<u32> cond_id, u32 mutex_id, vm::ps3::ptr<sys_cond_attribute_t> attr);
+error_code sys_cond_create(vm::ptr<u32> cond_id, u32 mutex_id, vm::ptr<sys_cond_attribute_t> attr);
 error_code sys_cond_destroy(u32 cond_id);
 error_code sys_cond_wait(ppu_thread& ppu, u32 cond_id, u64 timeout);
 error_code sys_cond_signal(ppu_thread& ppu, u32 cond_id);

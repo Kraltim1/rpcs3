@@ -189,6 +189,7 @@ enum CellKbMappingType
 	CELL_KB_MAPPING_BELGIAN_BELGIUM,
 	CELL_KB_MAPPING_POLISH_POLAND,
 	CELL_KB_MAPPING_PORTUGUESE_BRAZIL,
+	CELL_KB_MAPPING_TURKISH_TURKEY
 };
 
 static const u32 KB_MAX_KEYBOARDS = 127;
@@ -247,6 +248,7 @@ struct KbButton
 
 struct Keyboard
 {
+	bool m_key_repeat; // for future use
 	KbData m_data;
 	KbConfig m_config;
 	std::vector<KbButton> m_buttons;
@@ -254,6 +256,7 @@ struct Keyboard
 	Keyboard()
 		: m_data()
 		, m_config()
+		, m_key_repeat(false)
 	{
 	}
 };
@@ -273,19 +276,20 @@ public:
 	{
 		for(Keyboard& keyboard : m_keyboards)
 		{
+			KbData& data = keyboard.m_data;
+			KbConfig& config = keyboard.m_config;
+
+			// TODO: handle read modes
+
 			for(KbButton& button : keyboard.m_buttons)
 			{
 				if(button.m_keyCode != code)
 					continue;
 
-				KbData& data = keyboard.m_data;
-				KbConfig& config = keyboard.m_config;
-
 				if (pressed)
 				{
 					// Meta Keys
-					if (code == 308 || code == 307 || code == 306 || 
-					    code == 393 || code == 396 || code == 394)
+					if (code == 308 || code == 307 || code == 306 || code == 393 || code == 396 || code == 394)
 					{
 						data.mkey |= button.m_outKeyCode;
 					}
@@ -309,17 +313,17 @@ public:
 						data.len++;
 					}
 				}
-
-				if (!pressed)
+				else
 				{
 					// Meta Keys
-					if (code == 308 || code == 307 || code == 306 || 
-					    code == 393 || code == 396 || code == 394)
+					if (code == 308 || code == 307 || code == 306 || code == 393 || code == 396 || code == 394)
 					{
 						data.mkey &= ~button.m_outKeyCode;
 					}
+					// Needed to indicate key releases. Without this you have to tap another key before using the same key again
+					data.keycode[0] = CELL_KEYC_NO_EVENT;
+					data.len = 1;
 				}
-
 			}
 		}
 	}

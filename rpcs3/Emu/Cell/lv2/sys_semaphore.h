@@ -32,11 +32,11 @@ struct lv2_sema final : lv2_obj
 	atomic_t<s32> val;
 	std::deque<cpu_thread*> sq;
 
-	lv2_sema(u32 protocol, u64 name, s32 max, s32 value)
+	lv2_sema(u32 protocol, u32 shared, u64 key, s32 flags, u64 name, s32 max, s32 value)
 		: protocol(protocol)
-		, shared(0)
-		, key(0)
-		, flags(0)
+		, shared(shared)
+		, key(key)
+		, flags(flags)
 		, name(name)
 		, max(max)
 		, val(value)
@@ -49,9 +49,9 @@ class ppu_thread;
 
 // Syscalls
 
-error_code sys_semaphore_create(vm::ps3::ptr<u32> sem_id, vm::ps3::ptr<sys_semaphore_attribute_t> attr, s32 initial_val, s32 max_val);
+error_code sys_semaphore_create(vm::ptr<u32> sem_id, vm::ptr<sys_semaphore_attribute_t> attr, s32 initial_val, s32 max_val);
 error_code sys_semaphore_destroy(u32 sem_id);
 error_code sys_semaphore_wait(ppu_thread& ppu, u32 sem_id, u64 timeout);
 error_code sys_semaphore_trywait(u32 sem_id);
 error_code sys_semaphore_post(ppu_thread& ppu, u32 sem_id, s32 count);
-error_code sys_semaphore_get_value(u32 sem_id, vm::ps3::ptr<s32> count);
+error_code sys_semaphore_get_value(u32 sem_id, vm::ptr<s32> count);

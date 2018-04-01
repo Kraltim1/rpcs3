@@ -24,7 +24,7 @@ namespace rsx
 			(((/*alphakill*/0) << 2) | (/*maxaniso*/0) << 4) | ((/*maxlod*/0xc00) << 7) | ((/*minlod*/0) << 19) | ((/*enable*/0) << 31);
 
 		// Control1
-		registers[NV4097_SET_TEXTURE_CONTROL1 + (m_index * 8)] = 0xE4;
+		registers[NV4097_SET_TEXTURE_CONTROL1 + (m_index * 8)] = 0xAAE4;
 
 		// Filter
 		registers[NV4097_SET_TEXTURE_FILTER + (m_index * 8)] =
@@ -68,7 +68,7 @@ namespace rsx
 		switch (dimension())
 		{
 		case rsx::texture_dimension::dimension1d: return rsx::texture_dimension_extended::texture_dimension_1d;
-		case rsx::texture_dimension::dimension3d: return rsx::texture_dimension_extended::texture_dimension_2d;
+		case rsx::texture_dimension::dimension3d: return rsx::texture_dimension_extended::texture_dimension_3d;
 		case rsx::texture_dimension::dimension2d: return cubemap() ? rsx::texture_dimension_extended::texture_dimension_cubemap : rsx::texture_dimension_extended::texture_dimension_2d;
 
 		default: ASSUME(0);
@@ -183,7 +183,44 @@ namespace rsx
 
 	std::pair<std::array<u8, 4>, std::array<u8, 4>> fragment_texture::decoded_remap() const
 	{
-		const u32 remap_ctl = registers[NV4097_SET_TEXTURE_CONTROL1 + (m_index * 8)];
+		u32 remap_ctl = registers[NV4097_SET_TEXTURE_CONTROL1 + (m_index * 8)];
+		u32 remap_override = (remap_ctl >> 16) & 0xFFFF;
+
+		switch (format() & ~(CELL_GCM_TEXTURE_LN | CELL_GCM_TEXTURE_UN))
+		{
+		case CELL_GCM_TEXTURE_X16:
+		case CELL_GCM_TEXTURE_Y16_X16:
+		case CELL_GCM_TEXTURE_Y16_X16_FLOAT:
+		case CELL_GCM_TEXTURE_COMPRESSED_HILO8:
+		case CELL_GCM_TEXTURE_COMPRESSED_HILO_S8:
+		{
+			//Low bit in remap control affects whether the G component should match R and B components
+			//Components are usually interleaved R-G-R-G unless flag is set, then its R-R-R-G (Virtua Fighter 5)
+			//NOTE: The remap vector can also read from B-A-B-A in some cases (Mass Effect 3)
+			if (remap_override)
+			{
+				auto r_component = (remap_ctl >> 2) & 3;
+				remap_ctl = remap_ctl & ~(3 << 4) | r_component << 4;
+			}
+
+			remap_ctl &= 0xFFFF;
+			break;
+		}
+		case CELL_GCM_TEXTURE_B8:
+		{
+			//Low bit in remap control seems to affect whether the A component is forced to 1
+			//Only seen in BLUS31604
+			//TODO: Verify with a hardware test
+			if (remap_override)
+			{
+				//Set remap lookup for A component to FORCE_ONE
+				remap_ctl = remap_ctl & ~(3 << 8) | (1 << 8);
+			}
+			break;
+		}
+		default:
+			break;
+		}
 
 		//Remapping tables; format is A-R-G-B
 		//Remap input table. Contains channel index to read color from 
@@ -334,7 +371,7 @@ namespace rsx
 		switch (dimension())
 		{
 		case rsx::texture_dimension::dimension1d: return rsx::texture_dimension_extended::texture_dimension_1d;
-		case rsx::texture_dimension::dimension3d: return rsx::texture_dimension_extended::texture_dimension_2d;
+		case rsx::texture_dimension::dimension3d: return rsx::texture_dimension_extended::texture_dimension_3d;
 		case rsx::texture_dimension::dimension2d: return cubemap() ? rsx::texture_dimension_extended::texture_dimension_cubemap : rsx::texture_dimension_extended::texture_dimension_2d;
 
 		default: ASSUME(0);
@@ -362,6 +399,21 @@ namespace rsx
 	u8 vertex_texture::unsigned_remap() const
 	{
 		return ((registers[NV4097_SET_VERTEX_TEXTURE_ADDRESS + (m_index * 8)] >> 12) & 0xf);
+	}
+
+	std::pair<std::array<u8, 4>, std::array<u8, 4>> vertex_texture::decoded_remap() const
+	{
+		return
+		{
+			{ CELL_GCM_TEXTURE_REMAP_FROM_A, CELL_GCM_TEXTURE_REMAP_FROM_R, CELL_GCM_TEXTURE_REMAP_FROM_G, CELL_GCM_TEXTURE_REMAP_FROM_B },
+			{ CELL_GCM_TEXTURE_REMAP_REMAP, CELL_GCM_TEXTURE_REMAP_REMAP, CELL_GCM_TEXTURE_REMAP_REMAP, CELL_GCM_TEXTURE_REMAP_REMAP }
+		};
+	}
+
+	u32 vertex_texture::remap() const
+	{
+		//disabled
+		return 0xAAE4;
 	}
 
 	u8 vertex_texture::zfunc() const

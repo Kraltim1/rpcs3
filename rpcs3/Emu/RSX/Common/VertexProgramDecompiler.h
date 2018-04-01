@@ -61,7 +61,7 @@ struct VertexProgramDecompiler
 	const std::vector<u32>& m_data;
 	ParamArray m_parr;
 
-	std::string NotZeroPositive(const std::string code);
+	std::string NotZeroPositive(const std::string& code);
 	std::string GetMask(bool is_sca);
 	std::string GetVecMask();
 	std::string GetScaMask();
@@ -126,7 +126,14 @@ protected:
 	/** insert end of main function (return value, output copy...)
 	*/
 	virtual void insertMainEnd(std::stringstream &OS) = 0;
+
 public:
+	struct
+	{
+		bool has_lit_op = false;
+	}
+	properties;
+
 	VertexProgramDecompiler(const RSXVertexProgram& prog);
 	std::string Decompile();
 };

@@ -3,17 +3,19 @@
 #include "Utilities/File.h"
 #include "Utilities/Log.h"
 
+#include "custom_dock_widget.h"
 #include "gui_settings.h"
+#include "find_dialog.h"
 
 #include <memory>
 
-#include <QDockWidget>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QActionGroup>
 #include <QTimer>
+#include <QKeyEvent>
 
-class log_frame : public QDockWidget
+class log_frame : public custom_dock_widget
 {
 	Q_OBJECT
 
@@ -22,11 +24,16 @@ public:
 
 	/** Loads from settings. Public so that main_window can call this easily. */
 	void LoadSettings();
+
+	/** Repaint log colors after new stylesheet was applied */
+	void RepaintTextColors();
+
 Q_SIGNALS:
-	void log_frameClosed();
+	void LogFrameClosed();
 protected:
 	/** Override inherited method from Qt to allow signalling when close happened.*/
-	void closeEvent(QCloseEvent* event);
+	void closeEvent(QCloseEvent* event) override;
+	bool eventFilter(QObject* object, QEvent* event) override;
 private Q_SLOTS:
 	void UpdateUI();
 private:
@@ -35,25 +42,36 @@ private:
 
 	void CreateAndConnectActions();
 
-	QTabWidget *tabWidget;
-	QTextEdit *log;
-	QTextEdit *tty;
+	QTabWidget* m_tabWidget;
 
-	fs::file tty_file;
+	std::unique_ptr<find_dialog> m_find_dialog;
 
-	QAction* clearAct;
+	QList<QColor> m_color;
+	QColor m_color_stack;
+	QTextEdit* m_log;
+	QTextEdit* m_tty;
+	QString m_old_text;
+	ullong m_log_counter;
+	bool m_stack_log;
 
-	QActionGroup* logLevels;
-	QAction* nothingAct;
-	QAction* fatalAct;
-	QAction* errorAct;
-	QAction* todoAct;
-	QAction* successAct;
-	QAction* warningAct;
-	QAction* noticeAct;
-	QAction* traceAct;
+	fs::file m_tty_file;
 
-	QAction* TTYAct;
+	QAction* m_clearAct;
+	QAction* m_clearTTYAct;
+
+	QActionGroup* m_logLevels;
+	QAction* m_nothingAct;
+	QAction* m_fatalAct;
+	QAction* m_errorAct;
+	QAction* m_todoAct;
+	QAction* m_successAct;
+	QAction* m_warningAct;
+	QAction* m_noticeAct;
+	QAction* m_traceAct;
+
+	QAction* m_stackAct;
+
+	QAction* m_TTYAct;
 
 	std::shared_ptr<gui_settings> xgui_settings;
 };
